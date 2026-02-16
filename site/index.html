@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход — Календарный график работ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700&family=Roboto:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(160deg, #8b9298 0%, #6b7280 30%, #4b5563 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .auth-box {
+      background: linear-gradient(180deg, #f5f3ef 0%, #e8e4df 100%);
+      border: 1px solid #c4b8a8;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      padding: 36px;
+      max-width: 420px;
+      width: 100%;
+    }
+    h1 {
+      font-family: 'Roboto Condensed', sans-serif;
+      color: #2d3748;
+      font-size: 22px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .subtitle { color: #5a6577; font-size: 14px; text-align: center; margin-bottom: 28px; }
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #c4b8a8;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      color: #5a6577;
+      font-family: inherit;
+    }
+    .tab.active { color: #2d3748; border-bottom: 2px solid #e67e22; margin-bottom: -2px; }
+    .tab:hover { color: #2d3748; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3748; font-size: 14px; }
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #b8a898;
+      border-radius: 8px;
+      font-size: 16px;
+      background: #faf8f5;
+    }
+    .form-group input:focus { outline: none; border-color: #e67e22; box-shadow: 0 0 0 2px rgba(230,126,34,0.2); }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: linear-gradient(180deg, #e67e22 0%, #d35400 100%); color: #fff; margin-top: 8px; }
+    .btn-primary:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-phone { background: #4a5568; color: #e2e8f0; margin-top: 8px; }
+    .btn-phone:hover { background: #2d3748; }
+    .msg { font-size: 14px; margin-top: 12px; padding: 10px; border-radius: 8px; text-align: center; }
+    .msg.error { background: #fed7d7; color: #c53030; }
+    .msg.success { background: #c6f6d5; color: #276749; }
+    .phone-step { display: none; }
+    .phone-step.active { display: block; }
+    #recaptcha-container { margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="auth-box">
+    <h1>Календарный график работ</h1>
+    <p class="subtitle">Вход и регистрация</p>
+
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="login">Вход</button>
+      <button type="button" class="tab" data-tab="register">Регистрация</button>
+      <button type="button" class="tab" data-tab="phone">По телефону</button>
+    </div>
+
+    <!-- Вход по email + пароль -->
+    <div id="panel-login" class="panel active">
+      <form id="form-login" onsubmit="loginEmail(event)">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="example@mail.ru">
+        </div>
+        <div class="form-group">
+          <label>Пароль</label>
+          <input type="password" id="login-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-login">Войти</button>
+      </form>
+    </div>
+
+    <!-- Регистрация по email + пароль -->
+    <div id="panel-register" class="panel">
+      <form id="form-register" onsubmit="registerEmail(event)">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" required placeholder="example@mail.ru">
+        </div>
+        <div class="form-group">
+          <label>Пароль (не менее 6 символов)</label>
+          <input type="password" id="reg-password" required minlength="6" placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-register">Зарегистрироваться</button>
+      </form>
+    </div>
+
+    <!-- Вход по номеру телефона -->
+    <div id="panel-phone" class="panel">
+      <div id="phone-step1" class="phone-step active">
+        <div class="form-group">
+          <label>Номер телефона</label>
+          <input type="tel" id="phone-number" placeholder="+7 999 123-45-67" value="+7">
+        </div>
+        <div id="recaptcha-container"></div>
+        <button type="button" class="btn btn-phone" id="btn-send-sms">Отправить код по СМС</button>
+      </div>
+      <div id="phone-step2" class="phone-step">
+        <div class="form-group">
+          <label>Код из СМС</label>
+          <input type="text" id="phone-code" placeholder="123456" maxlength="6">
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-verify-code">Подтвердить</button>
+      </div>
+    </div>
+
+    <div id="auth-msg" class="msg" style="display:none;"></div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script>
+    let firebaseAuth = null;
+    let recaptchaVerifier = null;
+    let confirmationResult = null;
+
+    function initFirebase() {
+      const cfg = window.FIREBASE_CONFIG;
+      if (!cfg || !cfg.apiKey || cfg.apiKey === 'YOUR_API_KEY') {
+        document.getElementById('auth-msg').style.display = 'block';
+        document.getElementById('auth-msg').className = 'msg error';
+        document.getElementById('auth-msg').textContent = 'Настройте firebase-config.js (см. README).';
+        return false;
+      }
+      if (typeof firebase === 'undefined') {
+        document.getElementById('auth-msg').textContent = 'Не удалось загрузить Firebase.';
+        return false;
+      }
+      firebase.initializeApp(cfg);
+      firebaseAuth = firebase.auth();
+      return true;
+    }
+
+    function showMsg(text, isError) {
+      const el = document.getElementById('auth-msg');
+      el.style.display = 'block';
+      el.className = 'msg ' + (isError ? 'error' : 'success');
+      el.textContent = text;
+    }
+    function hideMsg() {
+      document.getElementById('auth-msg').style.display = 'none';
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        this.classList.add('active');
+        const id = 'panel-' + this.dataset.tab;
+        document.getElementById(id).classList.add('active');
+        hideMsg();
+        if (this.dataset.tab === 'phone') {
+          document.getElementById('phone-step1').classList.add('active');
+          document.getElementById('phone-step2').classList.remove('active');
+          initRecaptcha();
+        }
+      });
+    });
+
+    function initRecaptcha() {
+      if (!firebaseAuth || recaptchaVerifier) return;
+      if (document.getElementById('recaptcha-container').innerHTML) return;
+      recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        size: 'normal',
+        callback: function() {}
+      });
+      recaptchaVerifier.render();
+    }
+
+    function loginEmail(e) {
+      e.preventDefault();
+      if (!firebaseAuth) return;
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true;
+      hideMsg();
+      firebaseAuth.signInWithEmailAndPassword(
+        document.getElementById('login-email').value.trim(),
+        document.getElementById('login-password').value
+      ).then(function() {
+        window.location.href = 'app.html';
+      }).catch(function(err) {
+        showMsg(err.message || 'Ошибка входа', true);
+        btn.disabled = false;
+      });
+    }
+
+    function registerEmail(e) {
+      e.preventDefault();
+      if (!firebaseAuth) return;
+      const btn = document.getElementById('btn-register');
+      btn.disabled = true;
+      hideMsg();
+      firebaseAuth.createUserWithEmailAndPassword(
+        document.getElementById('reg-email').value.trim(),
+        document.getElementById('reg-password').value
+      ).then(function() {
+        showMsg('Регистрация успешна. Переход в приложение…', false);
+        setTimeout(function() { window.location.href = 'app.html'; }, 800);
+      }).catch(function(err) {
+        showMsg(err.message || 'Ошибка регистрации', true);
+        btn.disabled = false;
+      });
+    }
+
+    document.getElementById('btn-send-sms').addEventListener('click', function() {
+      if (!firebaseAuth) return;
+      let phone = document.getElementById('phone-number').value.trim().replace(/\s/g, '');
+      if (!phone.startsWith('+')) phone = '+7' + phone.replace(/^8/, '');
+      if (phone.length < 11) { showMsg('Введите корректный номер', true); return; }
+      if (!recaptchaVerifier) initRecaptcha();
+      const btn = this;
+      btn.disabled = true;
+      hideMsg();
+      firebaseAuth.signInWithPhoneNumber(phone, recaptchaVerifier)
+        .then(function(result) {
+          confirmationResult = result;
+          document.getElementById('phone-step1').classList.remove('active');
+          document.getElementById('phone-step2').classList.add('active');
+          showMsg('Код отправлен. Введите его ниже.', false);
+          btn.disabled = false;
+        })
+        .catch(function(err) {
+          showMsg(err.message || 'Ошибка отправки СМС', true);
+          btn.disabled = false;
+        });
+    });
+
+    document.getElementById('btn-verify-code').addEventListener('click', function() {
+      if (!confirmationResult) return;
+      const code = document.getElementById('phone-code').value.trim();
+      if (!code) { showMsg('Введите код из СМС', true); return; }
+      const btn = this;
+      btn.disabled = true;
+      hideMsg();
+      confirmationResult.confirm(code)
+        .then(function() {
+          window.location.href = 'app.html';
+        })
+        .catch(function(err) {
+          showMsg(err.message || 'Неверный код', true);
+          btn.disabled = false;
+        });
+    });
+
+    if (initFirebase() && firebaseAuth) {
+      firebaseAuth.onAuthStateChanged(function(user) {
+        if (user) window.location.href = 'app.html';
+      });
+    }
+  </script>
+</body>
+</html>

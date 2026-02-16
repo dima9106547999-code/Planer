@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Календарный график и Раздел 3 — Стройка, монолит</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;600;700&family=Roboto:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Roboto', 'Segoe UI', sans-serif;
+      background: linear-gradient(160deg, #8b9298 0%, #6b7280 30%, #4b5563 100%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      padding: 20px;
+      color: #2d3748;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .toolbar .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'Roboto Condensed', sans-serif;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .toolbar .btn:hover { opacity: 0.95; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.25); }
+    .btn-plan    { background: #4a5568; color: #e2e8f0; border-left: 4px solid #e67e22; }
+    .btn-section { background: #2d3748; color: #fbd38d; border-left: 4px solid #d69e2e; }
+    .btn-print   { background: #c53030; color: #fff; border-left: 4px solid #e53e3e; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: linear-gradient(180deg, #f5f3ef 0%, #e8e4df 100%);
+      padding: 28px;
+      border-radius: 4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+      border: 1px solid #c4b8a8;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    h1, h2 {
+      font-family: 'Roboto Condensed', sans-serif;
+      color: #2d3748;
+      margin-bottom: 8px;
+      font-size: 24px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .subtitle {
+      color: #5a6577;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    /* Статистика — палетка стройки/нерудных */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      padding: 18px;
+      border-radius: 4px;
+      color: #fff;
+      text-align: center;
+      font-family: 'Roboto Condensed', sans-serif;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .stat-card h3 { font-size: 28px; margin-bottom: 4px; font-weight: 700; }
+    .stat-card p { font-size: 13px; opacity: 0.95; text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat-plan   { background: linear-gradient(180deg, #5c6b73 0%, #4a5568 100%); }
+    .stat-inwork { background: linear-gradient(180deg, #e67e22 0%, #d35400 100%); }
+    .stat-done   { background: linear-gradient(180deg, #6b7f5c 0%, #556b44 100%); }
+    .stat-delay   { background: linear-gradient(180deg, #a84343 0%, #8b3636 100%); }
+    .stat-total  { background: linear-gradient(180deg, #6b7c8a 0%, #4a5568 100%); }
+
+    /* Панель действий */
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .controls .btn {
+      padding: 9px 18px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    }
+    .btn-primary { background: #4a5568; color: #e2e8f0; }
+    .btn-primary:hover { background: #2d3748; }
+    .btn-success { background: #6b7f5c; color: #fff; }
+    .btn-success:hover { background: #556b44; }
+    .search-box {
+      padding: 9px 14px;
+      border: 1px solid #b8a898;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 260px;
+      background: #faf8f5;
+    }
+    .controls select {
+      padding: 9px 14px;
+      border: 1px solid #b8a898;
+      border-radius: 4px;
+      font-size: 14px;
+      width: 180px;
+      background: #faf8f5;
+    }
+
+    /* Таблица графика — вид ведомости */
+    .table-container {
+      overflow-x: auto;
+      margin-bottom: 28px;
+      border: 1px solid #a89888;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th {
+      background: linear-gradient(180deg, #4a5568 0%, #2d3748 100%);
+      color: #e2e8f0;
+      padding: 12px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-family: 'Roboto Condensed', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      border-bottom: 2px solid #e67e22;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #d4ccc4;
+      background: #faf8f5;
+    }
+    tr:nth-child(even) td { background: #f0ebe4; }
+    tr:hover td { background: #e8e0d6; }
+    .status-badge {
+      padding: 5px 12px;
+      border-radius: 4px;
+      color: #fff;
+      font-weight: 600;
+      display: inline-block;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .status-plan   { background: #5c6b73; }
+    .status-inwork { background: #e67e22; }
+    .status-done   { background: #6b7f5c; }
+    .status-delay  { background: #a84343; }
+    .action-btn {
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      margin-right: 6px;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .action-btn .icon { width: 16px; height: 16px; }
+    .edit-btn { background: #6b7c8a; color: #fff; }
+    .edit-btn:hover { background: #4a5568; }
+    .delete-btn { background: #a84343; color: #fff; }
+    .delete-btn:hover { background: #8b3636; }
+    .duration { font-weight: 600; color: #2d3748; }
+
+    /* Диаграмма Ганта */
+    .gantt-container {
+      margin-top: 24px;
+      padding: 20px;
+      background: #e8e4df;
+      border-radius: 4px;
+      border: 1px solid #b8a898;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+    .gantt-title { font-size: 18px; color: #2d3748; margin-bottom: 16px; font-weight: 700; font-family: 'Roboto Condensed', sans-serif; }
+    .gantt-chart { overflow-x: auto; padding: 8px 0; }
+    .gantt-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      min-height: 38px;
+    }
+    .gantt-label {
+      width: 260px;
+      padding-right: 16px;
+      font-size: 14px;
+      color: #2d3748;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gantt-timeline {
+      flex: 1;
+      position: relative;
+      height: 38px;
+      background: #c4b8a8;
+      border-radius: 4px;
+    }
+    .gantt-bar {
+      position: absolute;
+      height: 100%;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .gantt-bar:hover { opacity: 0.95; transform: translateY(-2px); }
+    .gantt-dates {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-left: 276px;
+      font-size: 12px;
+      color: #5a6577;
+    }
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #4a5568; }
+    .legend-color { width: 18px; height: 18px; border-radius: 2px; }
+
+    /* Раздел 3 — таблица под печать/ведомость */
+    #page-section3 .container { padding: 24px; }
+    #page-section3 table { font-size: 13px; }
+    #page-section3 th, #page-section3 td {
+      border: 1px solid #a89888;
+      padding: 8px 10px;
+      vertical-align: top;
+      background: #faf8f5;
+    }
+    #page-section3 th {
+      background: linear-gradient(180deg, #4a5568 0%, #2d3748 100%);
+      color: #e2e8f0;
+      text-align: center;
+      font-family: 'Roboto Condensed', sans-serif;
+    }
+    #page-section3 h2 { font-size: 16px; line-height: 1.4; }
+    #page-section3 .add-row-wrap { margin-top: 14px; }
+    #page-section3 .btn-add-row {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      background: #6b7f5c;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    #page-section3 .btn-add-row:hover { background: #556b44; }
+
+    /* Модальное окно */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(45,55,72,0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: linear-gradient(180deg, #f5f3ef 0%, #e8e4df 100%);
+      padding: 28px;
+      border-radius: 4px;
+      max-width: 520px;
+      width: 92%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.4), 0 0 0 1px #b8a898;
+      border: 1px solid #c4b8a8;
+    }
+    .modal-header { font-size: 20px; margin-bottom: 20px; color: #2d3748; font-weight: 700; font-family: 'Roboto Condensed', sans-serif; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      color: #2d3748;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #b8a898;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #faf8f5;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    .form-actions { display: flex; gap: 14px; justify-content: flex-end; margin-top: 26px; padding-top: 8px; }
+    .form-actions .btn {
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      min-width: 140px;
+      transition: all 0.2s ease;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .form-actions .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .form-actions .btn-print {
+      background: linear-gradient(180deg, #e57373 0%, #c53030 100%);
+      color: #fff;
+    }
+    .form-actions .btn-print:hover { background: linear-gradient(180deg, #ef5350 0%, #b71c1c 100%); }
+    .form-actions .btn-success {
+      background: linear-gradient(180deg, #81c784 0%, #6b7f5c 100%);
+      color: #fff;
+    }
+    .form-actions .btn-success:hover { background: linear-gradient(180deg, #66bb6a 0%, #556b44 100%); }
+    .responsible-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .responsible-row select { flex: 1; }
+    .responsible-add { display: flex; gap: 8px; align-items: center; }
+    .responsible-add input { flex: 1; }
+    .btn-small { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-small.btn-danger { background: #a84343; color: #fff; }
+    .btn-small.btn-danger:hover { background: #8b3636; }
+    .btn-small.btn-success { background: #6b7f5c; color: #fff; }
+    .btn-small.btn-success:hover { background: #556b44; }
+    .empty-state { text-align: center; padding: 40px 20px; color: #5a6577; }
+    .empty-state h3 { font-size: 18px; margin-bottom: 8px; }
+
+    @media (max-width: 768px) {
+      .container { padding: 16px; }
+      .controls { flex-direction: column; align-items: stretch; }
+      .search-box, .controls select { width: 100%; }
+      .gantt-label { width: 140px; }
+      .gantt-dates { padding-left: 156px; }
+    }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .toolbar, .controls, .stats, .gantt-container, .action-btn, .search-box, .modal, .add-row-wrap { display: none !important; }
+      .container { box-shadow: none; padding: 10px; }
+      .page { display: block !important; page-break-after: always; }
+      .page:last-of-type { page-break-after: auto; }
+      table { font-size: 11px; }
+      th, td { padding: 6px 8px; }
+      /* Раздел 3 — строки для печати: чёткие границы, высота для заполнения от руки */
+      #page-section3 .container { padding: 12px; }
+      #page-section3 table { font-size: 11px; border: 1px solid #000; }
+      #page-section3 th, #page-section3 td {
+        border: 1px solid #000;
+        padding: 8px 10px;
+        min-height: 28px;
+      }
+      #page-section3 td { min-height: 32px; height: 32px; }
+      #page-section3 tbody tr { break-inside: avoid; }
+      #page-section3 h2 { font-size: 14px; margin-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <script id="embed-data" type="application/json">{}</script>
+
+  <div class="toolbar">
+    <button type="button" class="btn btn-plan" onclick="showPage('plan')">Календарный график</button>
+    <button type="button" class="btn btn-section" onclick="showPage('section3')">Раздел 3 (сведения о выполнении работ)</button>
+    <button type="button" class="btn btn-print" onclick="window.print()">Печать</button>
+  </div>
+
+  <!-- Страница 1: Календарный график -->
+  <div id="page-plan" class="page active">
+    <div class="container">
+      <h1>Календарный график работ</h1>
+      <p class="subtitle">Управление задачами и диаграмма Ганта</p>
+
+      <div class="stats">
+        <div class="stat-card stat-plan"><h3 id="stat-plan">0</h3><p>План</p></div>
+        <div class="stat-card stat-inwork"><h3 id="stat-inwork">0</h3><p>В работе</p></div>
+        <div class="stat-card stat-done"><h3 id="stat-done">0</h3><p>Завершено</p></div>
+        <div class="stat-card stat-delay"><h3 id="stat-delay">0</h3><p>Задержка</p></div>
+        <div class="stat-card stat-total"><h3 id="stat-total">0</h3><p>Всего дней</p></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" onclick="showAddModal()">Добавить задачу</button>
+        <button class="btn btn-success" onclick="exportToExcel()">Экспорт в CSV</button>
+        <button class="btn btn-success" onclick="saveAllData()" title="Сохранить в браузере">Сохранить</button>
+        <button class="btn btn-plan" onclick="saveToFile()" title="Записать все данные в HTML-файл">Сохранить в файл</button>
+        <button class="btn btn-primary" onclick="downloadBackup()">Скачать резервную копию</button>
+        <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreFromFile(event)">
+        <button class="btn btn-primary" onclick="document.getElementById('restoreFile').click()">Загрузить из файла</button>
+        <span id="saveStatus" style="margin-left:8px;color:#059669;font-size:13px"></span>
+        <input type="text" class="search-box" id="searchBox" placeholder="Поиск по задачам..." oninput="filterTasks()">
+        <select onchange="filterByStatus(this.value)">
+          <option value="">Все статусы</option>
+          <option value="План">План</option>
+          <option value="В работе">В работе</option>
+          <option value="Завершено">Завершено</option>
+          <option value="Задержка">Задержка</option>
+        </select>
+      </div>
+
+      <div class="table-container">
+        <table id="tasksTable">
+          <thead>
+            <tr>
+              <th style="width: 50px;">№</th>
+              <th>Задача</th>
+              <th style="width: 160px;">Ответственный</th>
+              <th style="width: 115px;">Дата начала</th>
+              <th style="width: 115px;">Дата окончания</th>
+              <th style="width: 70px;">Дней</th>
+              <th style="width: 110px;">Статус</th>
+              <th style="width: 160px;">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="tasksBody"></tbody>
+        </table>
+      </div>
+
+      <div class="gantt-container">
+        <div class="gantt-title">Диаграмма Ганта</div>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-color" style="background:#5c6b73"></div><span>План</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#e67e22"></div><span>В работе</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#6b7f5c"></div><span>Завершено</span></div>
+          <div class="legend-item"><div class="legend-color" style="background:#a84343"></div><span>Задержка</span></div>
+        </div>
+        <div id="ganttDates" class="gantt-dates"></div>
+        <div class="gantt-chart" id="ganttChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Страница 2: Раздел 3 -->
+  <div id="page-section3" class="page">
+    <div class="container">
+      <h2>РАЗДЕЛ 3. СВЕДЕНИЯ О ВЫПОЛНЕНИИ РАБОТ В ПРОЦЕССЕ СТРОИТЕЛЬСТВА, РЕКОНСТРУКЦИИ, КАПИТАЛЬНОГО РЕМОНТА ОБЪЕКТА КАПИТАЛЬНОГО СТРОИТЕЛЬСТВА</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>№ записи<br>1</th>
+            <th>Дата<br>2</th>
+            <th>Краткая характеристика и объемы выполненных работ, место выполнения работ<br>3</th>
+            <th>Документы, подтверждающие выполнение работ<br>4</th>
+            <th>ФИО уполномоченного представителя лица, осуществляющего строительство<br>5</th>
+            <th>Подпись<br>6</th>
+          </tr>
+        </thead>
+        <tbody id="section3Body">
+          <tr><td>1</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>2</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>3</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>4</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>5</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>6</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>7</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>8</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>9</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>10</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>11</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>12</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>13</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>14</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>15</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>16</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>17</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>18</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>19</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+          <tr><td>20</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>
+        </tbody>
+      </table>
+      <div class="add-row-wrap">
+        <button type="button" class="btn-add-row" onclick="addSection3Row()">Добавить строку</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно задачи -->
+  <div class="modal" id="taskModal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Добавить задачу</div>
+      <form id="taskForm" onsubmit="saveTask(event)">
+        <div class="form-group">
+          <label>Задача *</label>
+          <input type="text" id="taskName" required>
+        </div>
+        <div class="form-group">
+          <label>Ответственный *</label>
+          <div class="responsible-row">
+            <select id="taskResponsible" required></select>
+            <button type="button" class="btn-small btn-danger" onclick="removeSelectedResponsible()" title="Удалить выбранного из списка">✕</button>
+          </div>
+          <div class="responsible-add">
+            <input type="text" id="newResponsibleName" placeholder="ФИО нового ответственного" onkeydown="if(event.key==='Enter'){event.preventDefault();addResponsibleFromInput();}">
+            <button type="button" class="btn-small btn-success" onclick="addResponsibleFromInput()">Добавить в список</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Изменения ответственного</label>
+          <input type="text" id="taskResponsibleChange" placeholder="Например: с 01.04.2026 — Петров П.П.">
+        </div>
+        <div class="form-group">
+          <label>Дата начала *</label>
+          <input type="date" id="taskStart" required onchange="calculateDuration()">
+        </div>
+        <div class="form-group">
+          <label>Дата окончания *</label>
+          <input type="date" id="taskEnd" required onchange="calculateDuration()">
+        </div>
+        <div class="form-group">
+          <label>Длительность (дней)</label>
+          <input type="text" id="taskDuration" readonly style="background:#f1f5f9;">
+        </div>
+        <div class="form-group">
+          <label>Статус *</label>
+          <select id="taskStatus" required>
+            <option value="План">План</option>
+            <option value="В работе">В работе</option>
+            <option value="Завершено">Завершено</option>
+            <option value="Задержка">Задержка</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Примечание</label>
+          <textarea id="taskNote"></textarea>
+        </div>
+        <input type="hidden" id="taskId">
+        <div class="form-actions">
+          <button type="button" class="btn btn-print" onclick="closeModal()">Отмена</button>
+          <button type="submit" class="btn btn-success">Сохранить</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'stroika_calendar_data';
+    const defaultResponsibles = ['Иванов И.И.', 'Петров П.П.', 'Сидоров С.С.', 'Васильев В.В.', 'Николаев Н.Н.', 'Михайлов М.М.', 'Александров А.А.', 'Дмитриев Д.Д.', 'Григорьев Г.Г.', 'Семёнов С.С.'];
+    let responsibles = defaultResponsibles.slice();
+
+    const defaultTasks = [
+      { id: 1, name: "Сооружение шахтных колодцев", responsible: "Иванов И.И.", responsibleChange: "", start: "2026-03-01", end: "2026-03-07", status: "Завершено", note: "" },
+      { id: 2, name: "Проектирование", responsible: "Петров П.П.", responsibleChange: "", start: "2026-03-06", end: "2026-03-29", status: "План", note: "" },
+      { id: 3, name: "Согласование проекта", responsible: "Сидоров С.С.", responsibleChange: "", start: "2026-03-21", end: "2026-03-25", status: "План", note: "" },
+      { id: 4, name: "Монтаж оборудования", responsible: "Васильев В.В.", responsibleChange: "", start: "2026-03-26", end: "2026-04-05", status: "План", note: "" },
+      { id: 5, name: "Строительные работы", responsible: "Николаев Н.Н.", responsibleChange: "", start: "2026-04-06", end: "2026-05-10", status: "План", note: "" },
+      { id: 6, name: "Монтаж оборудования", responsible: "Михайлов М.М.", responsibleChange: "", start: "2026-05-11", end: "2026-05-25", status: "План", note: "" },
+      { id: 7, name: "Закупка материалов", responsible: "Александров А.А.", responsibleChange: "", start: "2026-05-26", end: "2026-06-05", status: "План", note: "" },
+      { id: 8, name: "Тестирование системы", responsible: "Дмитриев Д.Д.", responsibleChange: "", start: "2026-06-06", end: "2026-06-15", status: "План", note: "" },
+      { id: 9, name: "Приёмка объекта", responsible: "Григорьев Г.Г.", responsibleChange: "", start: "2026-06-16", end: "2026-06-20", status: "План", note: "" },
+      { id: 10, name: "Сдача документации", responsible: "Семёнов С.С.", responsibleChange: "", start: "2026-06-21", end: "2026-06-25", status: "План", note: "" }
+    ];
+    let tasks = defaultTasks.map(t => ({ ...t }));
+    let nextId = 11;
+    let currentFilter = '';
+
+    function fillResponsibleSelect() {
+      const sel = document.getElementById('taskResponsible');
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = '<option value="">Выберите ответственного</option>' + responsibles.map(r => '<option value="' + escapeHtml(r) + '">' + escapeHtml(r) + '</option>').join('');
+      if (current && responsibles.indexOf(current) !== -1) sel.value = current;
+    }
+    function addResponsibleFromInput() {
+      const input = document.getElementById('newResponsibleName');
+      const name = (input && input.value || '').trim();
+      if (!name) return;
+      if (responsibles.indexOf(name) !== -1) { input.value = ''; return; }
+      responsibles.push(name);
+      responsibles.sort();
+      fillResponsibleSelect();
+      document.getElementById('taskResponsible').value = name;
+      input.value = '';
+      saveToStorage();
+    }
+    function removeSelectedResponsible() {
+      const sel = document.getElementById('taskResponsible');
+      const value = sel && sel.value;
+      if (!value || !responsibles.length) return;
+      if (responsibles.length <= 1) { alert('Должен остаться хотя бы один ответственный в списке.'); return; }
+      const used = tasks.some(t => t.responsible === value);
+      if (used && !confirm('Этого ответственного используют в задачах. Всё равно удалить из списка?')) return;
+      responsibles = responsibles.filter(r => r !== value);
+      fillResponsibleSelect();
+      saveToStorage();
+    }
+
+    function getSection3Data() {
+      const tbody = document.getElementById('section3Body');
+      if (!tbody) return [];
+      const rows = [];
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length >= 6) rows.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim(), tds[3].textContent.trim(), tds[4].textContent.trim(), tds[5].textContent.trim()]);
+      });
+      return rows;
+    }
+    function restoreSection3(rows) {
+      const tbody = document.getElementById('section3Body');
+      if (!tbody || !Array.isArray(rows) || rows.length === 0) return;
+      tbody.innerHTML = rows.map((row, i) => '<tr><td>' + (i + 1) + '</td><td contenteditable="true">' + escapeHtml(row[1]) + '</td><td contenteditable="true">' + escapeHtml(row[2]) + '</td><td contenteditable="true">' + escapeHtml(row[3]) + '</td><td contenteditable="true">' + escapeHtml(row[4]) + '</td><td contenteditable="true">' + escapeHtml(row[5]) + '</td></tr>').join('');
+      tbody.querySelectorAll('td[contenteditable="true"]').forEach(td => { td.addEventListener('blur', saveToStorage); });
+    }
+    function escapeHtml(s) {
+      if (!s) return '';
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+    function loadFromEmbedData() {
+      const el = document.getElementById('embed-data');
+      if (!el || !el.textContent || el.textContent.trim() === '' || el.textContent.trim() === '{}') return false;
+      try {
+        const data = JSON.parse(el.textContent);
+        if (!data || typeof data !== 'object' || Object.keys(data).length === 0) return false;
+        if (Array.isArray(data.tasks)) {
+          tasks = data.tasks.length ? data.tasks : defaultTasks.map(t => ({ ...t }));
+          nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(t => t.id)) + 1;
+        }
+        if (data.responsibles && data.responsibles.length > 0) responsibles = data.responsibles;
+        if (data.section3 && data.section3.length > 0) restoreSection3(data.section3);
+        return true;
+      } catch (e) { return false; }
+    }
+    function loadFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.tasks && data.tasks.length > 0) {
+          tasks = data.tasks;
+          nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(t => t.id)) + 1;
+        }
+        if (data.responsibles && data.responsibles.length > 0) responsibles = data.responsibles;
+        if (data.section3 && data.section3.length > 0) restoreSection3(data.section3);
+      } catch (e) { console.warn('Load storage failed', e); }
+    }
+    function saveToStorage() {
+      try {
+        const data = { tasks, nextId, section3: getSection3Data(), responsibles };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) { console.warn('Save storage failed', e); }
+    }
+    function saveAllData() {
+      saveToStorage();
+      const el = document.getElementById('saveStatus');
+      if (el) { el.textContent = 'Сохранено'; setTimeout(() => { el.textContent = ''; }, 2000); }
+    }
+    function downloadBackup() {
+      const data = { tasks, nextId, section3: getSection3Data(), responsibles, savedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'Стройка_резерв_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    function saveToFile() {
+      const data = { tasks, nextId, section3: getSection3Data(), responsibles };
+      let jsonStr = JSON.stringify(data);
+      jsonStr = jsonStr.replace(/<\/script/gi, '\\u003c/script');
+      const embedEl = document.getElementById('embed-data');
+      if (!embedEl) { downloadHtmlFallback(jsonStr); return; }
+      const clone = document.documentElement.cloneNode(true);
+      const cloneEmbed = clone.querySelector('script#embed-data');
+      if (cloneEmbed) cloneEmbed.textContent = jsonStr;
+      const html = '<!DOCTYPE html>\n' + clone.outerHTML;
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const fileName = (document.title && document.title !== '') ? document.title.replace(/[^\w\s\-\.]/g, '_') + '.html' : 'index.html';
+      if (typeof window.showSaveFilePicker === 'function') {
+        window.showSaveFilePicker({ suggestedName: fileName, types: [{ description: 'HTML', accept: { 'text/html': ['.html'] } }] })
+          .then(fh => fh.createWritable().then(w => { w.write(blob); w.close(); showSaveStatus('Сохранено в файл'); }))
+          .catch(() => downloadHtmlFallback(jsonStr));
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showSaveStatus('Файл скачан. Сохраните его вместо текущего index.html');
+      }
+    }
+    function downloadHtmlFallback(jsonStr) {
+      const clone = document.documentElement.cloneNode(true);
+      const cloneEmbed = clone.querySelector('script#embed-data');
+      if (cloneEmbed) cloneEmbed.textContent = jsonStr;
+      const html = '<!DOCTYPE html>\n' + clone.outerHTML;
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'index.html';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showSaveStatus('Файл скачан. Замените им текущий index.html');
+    }
+    function showSaveStatus(msg) {
+      const el = document.getElementById('saveStatus');
+      if (el) { el.textContent = msg; setTimeout(() => { el.textContent = ''; }, 4000); }
+    }
+    function restoreFromFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function() {
+        try {
+          const data = JSON.parse(reader.result);
+          if (data.tasks && data.tasks.length > 0) { tasks = data.tasks; nextId = data.nextId != null ? data.nextId : Math.max(0, ...tasks.map(t => t.id)) + 1; }
+          if (data.responsibles && data.responsibles.length > 0) responsibles = data.responsibles;
+          if (data.section3 && data.section3.length > 0) restoreSection3(data.section3);
+          fillResponsibleSelect();
+          renderTasks();
+          const el = document.getElementById('saveStatus');
+          if (el) { el.textContent = 'Данные загружены'; setTimeout(() => { el.textContent = ''; }, 2000); }
+        } catch (e) { alert('Ошибка чтения файла'); }
+      };
+      reader.readAsText(file, 'UTF-8');
+      event.target.value = '';
+    }
+
+    function showPage(which) {
+      document.getElementById('page-plan').classList.toggle('active', which === 'plan');
+      document.getElementById('page-section3').classList.toggle('active', which === 'section3');
+    }
+
+    function getStatusClass(s) {
+      const map = { 'План': 'status-plan', 'В работе': 'status-inwork', 'Завершено': 'status-done', 'Задержка': 'status-delay' };
+      return map[s] || '';
+    }
+    function calculateDays(start, end) {
+      const a = new Date(start), b = new Date(end);
+      return Math.ceil((b - a) / (1000 * 60 * 60 * 24));
+    }
+    function formatDate(str) {
+      return new Date(str).toLocaleDateString('ru-RU');
+    }
+
+    function updateStats() {
+      const st = { 'План': 0, 'В работе': 0, 'Завершено': 0, 'Задержка': 0 };
+      let total = 0;
+      tasks.forEach(t => {
+        if (st.hasOwnProperty(t.status)) st[t.status]++;
+        total += calculateDays(t.start, t.end);
+      });
+      document.getElementById('stat-plan').textContent = st['План'];
+      document.getElementById('stat-inwork').textContent = st['В работе'];
+      document.getElementById('stat-done').textContent = st['Завершено'];
+      document.getElementById('stat-delay').textContent = st['Задержка'];
+      document.getElementById('stat-total').textContent = total;
+    }
+
+    function renderTasks() {
+      const tbody = document.getElementById('tasksBody');
+      const search = document.getElementById('searchBox').value.toLowerCase();
+      const filtered = tasks.filter(t => {
+        const okSearch = !search || t.name.toLowerCase().includes(search) || t.responsible.toLowerCase().includes(search);
+        const okStatus = !currentFilter || t.status === currentFilter;
+        return okSearch && okStatus;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><h3>Нет задач</h3><p>Добавьте задачу или измените фильтр</p></td></tr>';
+        updateStats();
+        renderGantt();
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((task, i) => {
+        const dur = calculateDays(task.start, task.end);
+        const cls = getStatusClass(task.status);
+        return '<tr><td>' + (i + 1) + '</td><td><strong>' + task.name + '</strong></td><td>' + task.responsible + '</td><td>' + formatDate(task.start) + '</td><td>' + formatDate(task.end) + '</td><td class="duration">' + dur + '</td><td><span class="status-badge ' + cls + '">' + task.status + '</span></td><td><button class="action-btn edit-btn" onclick="editTask(' + task.id + ')" title="Изменить"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="action-btn delete-btn" onclick="deleteTask(' + task.id + ')" title="Удалить"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button></td></tr>';
+      }).join('');
+
+      updateStats();
+      renderGantt();
+    }
+
+    function renderGantt() {
+      const chart = document.getElementById('ganttChart');
+      const datesEl = document.getElementById('ganttDates');
+      if (tasks.length === 0) { chart.innerHTML = ''; datesEl.innerHTML = ''; return; }
+
+      const dates = tasks.map(t => [new Date(t.start), new Date(t.end)]).flat();
+      const minD = new Date(Math.min(...dates));
+      const maxD = new Date(Math.max(...dates));
+      const totalDays = Math.ceil((maxD - minD) / (1000 * 60 * 60 * 24)) + 1;
+      const colors = { 'План': '#5c6b73', 'В работе': '#e67e22', 'Завершено': '#6b7f5c', 'Задержка': '#a84343' };
+
+      datesEl.innerHTML = '<span>' + formatDate(minD.toISOString().split('T')[0]) + '</span><span>' + formatDate(maxD.toISOString().split('T')[0]) + '</span>';
+
+      chart.innerHTML = tasks.map(task => {
+        const start = new Date(task.start), end = new Date(task.end);
+        const offset = Math.ceil((start - minD) / (1000 * 60 * 60 * 24));
+        const dur = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        const left = (offset / totalDays) * 100;
+        const width = (dur / totalDays) * 100;
+        return '<div class="gantt-row"><div class="gantt-label" title="' + task.name + '">' + task.name + '</div><div class="gantt-timeline"><div class="gantt-bar" style="left:' + left + '%;width:' + width + '%;background:' + (colors[task.status] || '#4a5568') + '" title="' + task.name + ' ' + formatDate(task.start) + ' – ' + formatDate(task.end) + '">' + dur + ' д</div></div></div>';
+      }).join('');
+    }
+
+    function showAddModal() {
+      document.getElementById('modalTitle').textContent = 'Добавить задачу';
+      document.getElementById('taskForm').reset();
+      document.getElementById('taskId').value = '';
+      document.getElementById('taskResponsibleChange').value = '';
+      document.getElementById('newResponsibleName').value = '';
+      fillResponsibleSelect();
+      document.getElementById('taskModal').classList.add('active');
+    }
+
+    function addSection3Row() {
+      const tbody = document.getElementById('section3Body');
+      const rows = tbody.querySelectorAll('tr');
+      const nextNum = rows.length + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + nextNum + '</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td>';
+      tbody.appendChild(tr);
+      tr.querySelectorAll('td[contenteditable="true"]').forEach(td => { td.addEventListener('blur', saveToStorage); });
+      saveToStorage();
+    }
+    function editTask(id) {
+      const t = tasks.find(x => x.id === id);
+      if (!t) return;
+      document.getElementById('modalTitle').textContent = 'Изменить задачу';
+      document.getElementById('taskId').value = t.id;
+      document.getElementById('taskName').value = t.name;
+      document.getElementById('taskResponsible').value = t.responsible;
+      document.getElementById('taskResponsibleChange').value = t.responsibleChange || '';
+      document.getElementById('taskStart').value = t.start;
+      document.getElementById('taskEnd').value = t.end;
+      document.getElementById('taskStatus').value = t.status;
+      document.getElementById('taskNote').value = t.note;
+      document.getElementById('newResponsibleName').value = '';
+      fillResponsibleSelect();
+      calculateDuration();
+      document.getElementById('taskModal').classList.add('active');
+    }
+    function deleteTask(id) {
+      if (confirm('Удалить эту задачу?')) {
+        tasks = tasks.filter(t => t.id !== id);
+        renderTasks();
+        saveToStorage();
+      }
+    }
+    function closeModal() {
+      document.getElementById('taskModal').classList.remove('active');
+    }
+    function saveTask(e) {
+      e.preventDefault();
+      const id = document.getElementById('taskId').value;
+      const data = {
+        name: document.getElementById('taskName').value,
+        responsible: document.getElementById('taskResponsible').value,
+        responsibleChange: document.getElementById('taskResponsibleChange').value,
+        start: document.getElementById('taskStart').value,
+        end: document.getElementById('taskEnd').value,
+        status: document.getElementById('taskStatus').value,
+        note: document.getElementById('taskNote').value
+      };
+      if (id) {
+        const idx = tasks.findIndex(t => t.id === parseInt(id, 10));
+        tasks[idx] = { ...tasks[idx], ...data };
+      } else {
+        tasks.push({ id: nextId++, ...data });
+      }
+      closeModal();
+      renderTasks();
+      saveToStorage();
+    }
+    function calculateDuration() {
+      const s = document.getElementById('taskStart').value, e = document.getElementById('taskEnd').value;
+      if (s && e) document.getElementById('taskDuration').value = calculateDays(s, e) + ' дней';
+    }
+    function filterTasks() { renderTasks(); }
+    function filterByStatus(v) { currentFilter = v; renderTasks(); }
+    function exportToExcel() {
+      let csv = 'data:text/csv;charset=utf-8,\uFEFF';
+      csv += '№,Задача,Ответственный,Изменения ответственного,Дата начала,Дата окончания,Длительность (дн),Статус,Примечание\n';
+      tasks.forEach((t, i) => {
+        csv += (i + 1) + ',"' + t.name + '","' + t.responsible + '","' + (t.responsibleChange || '') + '",' + formatDate(t.start) + ',' + formatDate(t.end) + ',' + calculateDays(t.start, t.end) + ',"' + t.status + '","' + (t.note || '') + '"\n';
+      });
+      const a = document.createElement('a');
+      a.href = encodeURI(csv);
+      a.download = 'Календарный_график_' + new Date().toISOString().split('T')[0] + '.csv';
+      a.click();
+    }
+
+    if (!loadFromEmbedData()) loadFromStorage();
+    fillResponsibleSelect();
+    document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(td => { td.addEventListener('blur', saveToStorage); });
+    window.addEventListener('beforeunload', saveToStorage);
+    renderTasks();
+  </script>
+</body>
+</html>
