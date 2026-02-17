@@ -250,29 +250,7 @@
       });
     }
 
-    document.getElementById('btn-send-sms').addEventListener('click', function() {
-      if (!firebaseAuth) return;
-      let phone = document.getElementById('phone-number').value.trim().replace(/\s/g, '');
-      if (!phone.startsWith('+')) phone = '+7' + phone.replace(/^8/, '');
-      if (phone.length < 11) { showMsg('Введите корректный номер', true); return; }
-      if (!recaptchaVerifier) initRecaptcha();
-      const btn = this;
-      btn.disabled = true;
-      hideMsg();
-      firebaseAuth.signInWithPhoneNumber(phone, recaptchaVerifier)
-        .then(function(result) {
-          confirmationResult = result;
-          document.getElementById('phone-step1').classList.remove('active');
-          document.getElementById('phone-step2').classList.add('active');
-          showMsg('Код отправлен. Введите его ниже.', false);
-          btn.disabled = false;
-        })
-        .catch(function(err) {
-          showMsg(err.message || 'Ошибка отправки СМС', true);
-          btn.disabled = false;
-        });
-    });
-<script type="module">
+    <script type="module">
   import {
     RecaptchaVerifier,
     signInWithPhoneNumber,
@@ -364,4 +342,3 @@
 <script type="module" src="script.js"></script>
 </body>
 </html>
-    
