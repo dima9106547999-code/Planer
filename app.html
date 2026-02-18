@@ -634,6 +634,7 @@
     let historyUnsubscribe = null;
     let pendingSaveTimer = null;
     let suppressRemoteApply = false;
+    let cloudPermissionWarningShown = false;
 
     function getLocalSession() {
       try {
@@ -668,6 +669,27 @@
       } catch (e) {
         return String(Date.now());
       }
+    }
+
+    function showSyncStatus(message, isError) {
+      const el = document.getElementById('saveStatus');
+      if (!el) return;
+      el.style.color = isError ? '#c53030' : '#059669';
+      el.textContent = message;
+      if (!isError) {
+        setTimeout(function() { el.textContent = ''; }, 2500);
+      }
+    }
+
+    function showCloudPermissionWarningOnce() {
+      if (cloudPermissionWarningShown) return;
+      cloudPermissionWarningShown = true;
+      showSyncStatus('Нет доступа к общей таблице Firestore', true);
+      alert(
+        'Нет доступа к общей таблице Firestore.\n\n' +
+        'Добавьте правила для пути sharedData/calendarMain и sharedData/calendarMain/history.\n' +
+        'Иначе изменения будут только локально на этом устройстве.'
+      );
     }
 
     function normalizeReason(reason) {
@@ -732,11 +754,16 @@
             renderTasks();
             subscribeSharedDoc();
             subscribeHistory();
-          }).catch(function() {
+          }).catch(function(err) {
             if (!loadFromEmbedData()) loadFromStorage();
             fillResponsibleSelect();
             document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(function(td) { td.addEventListener('blur', saveToStorage); });
             renderTasks();
+            if (err && err.code === 'permission-denied') {
+              showCloudPermissionWarningOnce();
+            } else {
+              showSyncStatus('Облако недоступно, включен локальный режим', true);
+            }
           });
         });
       } catch (e) {
@@ -871,6 +898,11 @@
             at: firebase.firestore.FieldValue.serverTimestamp()
           });
         }).catch(function(e) {
+          if (e && e.code === 'permission-denied') {
+            showCloudPermissionWarningOnce();
+          } else {
+            showSyncStatus('Ошибка сохранения в облако', true);
+          }
           console.warn('History save failed', e);
         });
       } catch (e) { console.warn('Firestore save failed', e); }
