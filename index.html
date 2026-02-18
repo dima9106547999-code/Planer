@@ -97,9 +97,9 @@
     <p class="subtitle">Вход и регистрация</p>
 
     <div class="tabs">
-      <button type="button" class="tab active" data-tab="login">Вход</button>
-      <button type="button" class="tab" data-tab="register">Регистрация</button>
-      <button type="button" class="tab" data-tab="phone">По телефону</button>
+      <button type="button" class="tab active" data-tab="login" onclick="switchTab('login')">Вход</button>
+      <button type="button" class="tab" data-tab="register" onclick="switchTab('register')">Регистрация</button>
+      <button type="button" class="tab" data-tab="phone" onclick="switchTab('phone')">По телефону</button>
     </div>
 
     <!-- Вход по email + пароль -->
@@ -167,13 +167,15 @@
 
     function showMsg(text, isError) {
       const el = document.getElementById('auth-msg');
+      if (!el) return;
       el.style.display = 'block';
       el.className = 'msg ' + (isError ? 'error' : 'success');
       el.textContent = text;
     }
 
     function hideMsg() {
-      document.getElementById('auth-msg').style.display = 'none';
+      const el = document.getElementById('auth-msg');
+      if (el) el.style.display = 'none';
     }
 
     function isFirebaseReady() {
@@ -238,14 +240,34 @@
     }
 
     function switchPhoneToCodeStep() {
-      document.getElementById('phone-step1').classList.remove('active');
-      document.getElementById('phone-step2').classList.add('active');
+      const step1 = document.getElementById('phone-step1');
+      const step2 = document.getElementById('phone-step2');
+      if (!step1 || !step2) return;
+      step1.classList.remove('active');
+      step2.classList.add('active');
     }
 
     function resetPhoneSteps() {
-      document.getElementById('phone-step1').classList.add('active');
-      document.getElementById('phone-step2').classList.remove('active');
-      document.getElementById('phone-code').value = '';
+      const step1 = document.getElementById('phone-step1');
+      const step2 = document.getElementById('phone-step2');
+      const codeInput = document.getElementById('phone-code');
+      if (step1) step1.classList.add('active');
+      if (step2) step2.classList.remove('active');
+      if (codeInput) codeInput.value = '';
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.tab === tabName);
+      });
+      document.querySelectorAll('.panel').forEach(function(p) {
+        p.classList.toggle('active', p.id === 'panel-' + tabName);
+      });
+      hideMsg();
+      if (tabName === 'phone') {
+        resetPhoneSteps();
+        initRecaptcha();
+      }
     }
 
     function loginEmail(e) {
@@ -436,28 +458,20 @@
 
     document.querySelectorAll('.tab').forEach(function(tab) {
       tab.addEventListener('click', function() {
-        document.querySelectorAll('.tab').forEach(function(t) {
-          t.classList.remove('active');
-        });
-        document.querySelectorAll('.panel').forEach(function(p) {
-          p.classList.remove('active');
-        });
-
-        this.classList.add('active');
-        document.getElementById('panel-' + this.dataset.tab).classList.add('active');
-        hideMsg();
-
-        if (this.dataset.tab === 'phone') {
-          resetPhoneSteps();
-          initRecaptcha();
-        }
+        switchTab(this.dataset.tab);
       });
     });
 
-    document.getElementById('btn-send-sms').addEventListener('click', sendPhoneCode);
-    document.getElementById('btn-verify-code').addEventListener('click', verifyPhoneCode);
+    const sendSmsBtn = document.getElementById('btn-send-sms');
+    const verifyCodeBtn = document.getElementById('btn-verify-code');
+    if (sendSmsBtn) sendSmsBtn.addEventListener('click', sendPhoneCode);
+    if (verifyCodeBtn) verifyCodeBtn.addEventListener('click', verifyPhoneCode);
 
-    initFirebase();
+    try {
+      initFirebase();
+    } catch (e) {
+      showMsg('Ошибка инициализации Firebase. Включен локальный демо-режим.', false);
+    }
   </script>
 </body>
 </html>
