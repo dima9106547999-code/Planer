@@ -1,0 +1,71 @@
+﻿---
+alwaysApply: false
+description: Firestore Rules guide for shared calendar data and change history
+---
+# Firestore Rules Guide
+
+Р­С‚РѕС‚ РїСЂРѕРµРєС‚ С…СЂР°РЅРёС‚ РѕР±С‰РёРµ РґР°РЅРЅС‹Рµ РєР°Р»РµРЅРґР°СЂСЏ РІ `sharedData/calendarMain` Рё РёСЃС‚РѕСЂРёСЋ РёР·РјРµРЅРµРЅРёР№ РІ РїРѕРґРїР°РїРєРµ `history`.
+
+РљР»СЋС‡РµРІР°СЏ Р»РѕРіРёРєР° РЅР°С…РѕРґРёС‚СЃСЏ РІ [app.html](mdc:app.html), РіРґРµ РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РїСѓС‚Рё:
+- `sharedData/calendarMain`
+- `sharedData/calendarMain/history/{docId}`
+
+## Recommended Rules (РµРґРёРЅР°СЏ С‚Р°Р±Р»РёС†Р° РґР»СЏ РІСЃРµС… Р°РІС‚РѕСЂРёР·РѕРІР°РЅРЅС‹С…)
+
+```txt
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // РћР±С‰РёРµ РґР°РЅРЅС‹Рµ РєР°Р»РµРЅРґР°СЂСЏ (РѕРґРёРЅ РґРѕРєСѓРјРµРЅС‚ РґР»СЏ РІСЃРµС…)
+    match /sharedData/calendarMain {
+      allow read, write: if request.auth != null;
+    }
+
+    // РСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№ РїРѕ РѕР±С‰РµР№ С‚Р°Р±Р»РёС†Рµ
+    match /sharedData/calendarMain/history/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // РЎС‚Р°СЂС‹Р№ РїСѓС‚СЊ (РґР»СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё/РјРёРіСЂР°С†РёРё)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+## More Secure Variant (optional)
+
+Р•СЃР»Рё РЅСѓР¶РЅРѕ Р·Р°РїСЂРµС‚РёС‚СЊ СѓРґР°Р»РµРЅРёРµ РѕР±С‰РµР№ С‚Р°Р±Р»РёС†С‹:
+
+```txt
+match /sharedData/calendarMain {
+  allow read: if request.auth != null;
+  allow create, update: if request.auth != null;
+  allow delete: if false;
+}
+```
+
+## Setup Checklist
+
+1. Firebase Console -> Firestore Database -> Rules: РІСЃС‚Р°РІРёС‚СЊ РїСЂР°РІРёР»Р° РІС‹С€Рµ.
+2. Firebase Console -> Authentication -> Sign-in method:
+   - РІРєР»СЋС‡РёС‚СЊ `Email/Password`
+   - РІРєР»СЋС‡РёС‚СЊ `Phone` (РµСЃР»Рё РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІС…РѕРґ РїРѕ С‚РµР»РµС„РѕРЅСѓ)
+3. Firebase Console -> Authentication -> Settings -> Authorized domains:
+   - РґРѕР±Р°РІРёС‚СЊ `dima9106547999-code.github.io`
+   - РґРѕР±Р°РІРёС‚СЊ `localhost` РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕР№ СЂР°Р·СЂР°Р±РѕС‚РєРё
+4. РџСЂРѕРІРµСЂРёС‚СЊ [firebase-config.js](mdc:firebase-config.js): РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ СЂРµР°Р»СЊРЅС‹Рµ РєР»СЋС‡Рё РїСЂРѕРµРєС‚Р°.
+
+## Quick Verification
+
+1. РћС‚РєСЂС‹С‚СЊ СЃР°Р№С‚ РЅР° РґРІСѓС… СѓСЃС‚СЂРѕР№СЃС‚РІР°С… Рё РІРѕР№С‚Рё РЅР° РѕР±РѕРёС….
+2. РќР° РїРµСЂРІРѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ РёР·РјРµРЅРёС‚СЊ Р·Р°РґР°С‡Сѓ/СЃС‚Р°С‚СѓСЃ.
+3. РќР° РІС‚РѕСЂРѕРј СѓСЃС‚СЂРѕР№СЃС‚РІРµ РґРѕР»Р¶РЅРѕ РїРѕСЏРІРёС‚СЊСЃСЏ РѕР±РЅРѕРІР»РµРЅРёРµ (realtime sync).
+4. Р’ Р±Р»РѕРєРµ "РСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№" РґРѕР»Р¶РЅР° РїРѕСЏРІРёС‚СЊСЃСЏ Р·Р°РїРёСЃСЊ СЃ Р°РІС‚РѕСЂРѕРј Рё РІСЂРµРјРµРЅРµРј.
+
+## Typical Issues
+
+- `permission-denied`: РїСЂР°РІРёР»Р° РЅРµ РїРѕР·РІРѕР»СЏСЋС‚ С‡РёС‚Р°С‚СЊ/РїРёСЃР°С‚СЊ `sharedData`.
+- Р”Р°РЅРЅС‹Рµ РЅРµ СЃРёРЅС…СЂРѕРЅРёР·РёСЂСѓСЋС‚СЃСЏ: РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ РёР»Рё СЃР°Р№С‚ РѕС‚РєСЂС‹С‚ СЃРѕ СЃС‚Р°СЂС‹Рј РєРµС€РµРј.
+- РСЃС‚РѕСЂРёСЏ РїСѓСЃС‚Р°СЏ: РЅРµ Р±С‹Р»Рѕ СѓСЃРїРµС€РЅС‹С… Р·Р°РїРёСЃРµР№ РІ `history` РёР»Рё РЅРµС‚ РїСЂР°РІ РЅР° С‡С‚РµРЅРёРµ.
