@@ -1,0 +1,76 @@
+﻿---
+alwaysApply: false
+description: Production Firestore rules with roles for shared calendar and history
+---
+# Firestore Production Rules (Roles)
+
+Use this variant when you need role-based access control.
+
+## Data Model
+
+- `sharedData/calendarMain` - shared calendar document.
+- `sharedData/calendarMain/history/{docId}` - change history records.
+- `users/{uid}` - user profile with role: `admin`, `editor`, `viewer`.
+
+Example `users/{uid}` document:
+
+```json
+{ "role": "editor" }
+```
+
+## Rules (role-based)
+
+```txt
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == 'admin';
+    }
+
+    function canEdit() {
+      return signedIn() && (role() == 'admin' || role() == 'editor');
+    }
+
+    function canReadShared() {
+      return signedIn() && (role() == 'admin' || role() == 'editor' || role() == 'viewer');
+    }
+
+    // Shared calendar document
+    match /sharedData/calendarMain {
+      allow read: if canReadShared();
+      allow create, update: if canEdit();
+      allow delete: if isAdmin();
+    }
+
+    // Shared history records
+    match /sharedData/calendarMain/history/{docId} {
+      allow read: if canReadShared();
+      allow create: if canEdit();
+      allow update, delete: if isAdmin();
+    }
+
+    // User profile
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow update, delete: if isAdmin();
+    }
+  }
+}
+```
+
+## Notes
+
+- If you do not use roles in `users/{uid}`, use [firestore-rules-guide.mdc](mdc:.cursor/rules/firestore-rules-guide.mdc).
+- On first sign-in, create `users/{uid}` with a default role like `viewer`.
+- Keep role changes admin-only (already enforced by rules above).
