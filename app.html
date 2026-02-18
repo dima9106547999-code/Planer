@@ -133,6 +133,37 @@
       width: 180px;
       background: #faf8f5;
     }
+    .history-box {
+      margin-bottom: 18px;
+      border: 1px solid #c4b8a8;
+      border-radius: 4px;
+      background: #f7f4ef;
+      padding: 10px 12px;
+    }
+    .history-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #2d3748;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .history-list {
+      list-style: none;
+      max-height: 130px;
+      overflow: auto;
+      margin: 0;
+      padding: 0;
+      font-size: 13px;
+      color: #4a5568;
+    }
+    .history-list li {
+      padding: 4px 0;
+      border-bottom: 1px dashed #d4ccc4;
+    }
+    .history-list li:last-child {
+      border-bottom: none;
+    }
 
     /* Таблица графика — вид ведомости */
     .table-container {
@@ -436,7 +467,7 @@
       <div class="controls">
         <button class="btn btn-primary" onclick="showAddModal()">Добавить задачу</button>
         <button class="btn btn-success" onclick="exportToExcel()">Экспорт в CSV</button>
-        <button class="btn btn-success" onclick="saveAllData()" title="Сохранить в браузере">Сохранить</button>
+        <button class="btn btn-success" onclick="saveAllData()" title="Сохранить">Сохранить</button>
         <button class="btn btn-plan" onclick="saveToFile()" title="Записать все данные в HTML-файл">Сохранить в файл</button>
         <button class="btn btn-primary" onclick="downloadBackup()">Скачать резервную копию</button>
         <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreFromFile(event)">
@@ -450,6 +481,12 @@
           <option value="Завершено">Завершено</option>
           <option value="Задержка">Задержка</option>
         </select>
+      </div>
+      <div class="history-box" id="historyBox" style="display:none">
+        <div class="history-title">История изменений</div>
+        <ul class="history-list" id="historyList">
+          <li>Загрузка истории...</li>
+        </ul>
       </div>
 
       <div class="table-container">
@@ -589,7 +626,10 @@
   <script>
     let currentUser = null;
     let firestoreDb = null;
+    const SHARED_COLLECTION = 'sharedData';
+    const SHARED_DOC_ID = 'calendarMain';
     const LOCAL_SESSION_KEY = 'stroika_current_user';
+    let lastSavedSignature = '';
 
     function getLocalSession() {
       try {
@@ -597,6 +637,32 @@
         return session && typeof session === 'object' ? session : null;
       } catch (e) {
         return null;
+      }
+    }
+
+    function getActorLabel() {
+      if (currentUser) {
+        return currentUser.email || currentUser.phoneNumber || currentUser.uid || 'Пользователь';
+      }
+      const localSession = getLocalSession();
+      if (!localSession) return 'Локальный пользователь';
+      return localSession.email || localSession.phone || 'Локальный пользователь';
+    }
+
+    function getDataSnapshotForSave() {
+      return {
+        tasks: tasks,
+        nextId: nextId,
+        section3: getSection3Data(),
+        responsibles: responsibles
+      };
+    }
+
+    function getSignature(data) {
+      try {
+        return JSON.stringify(data);
+      } catch (e) {
+        return String(Date.now());
       }
     }
 
@@ -635,6 +701,7 @@
             fillResponsibleSelect();
             document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(function(td) { td.addEventListener('blur', saveToStorage); });
             renderTasks();
+            loadHistory();
           }).catch(function() {
             if (!loadFromEmbedData()) loadFromStorage();
             fillResponsibleSelect();
@@ -649,27 +716,88 @@
 
     function loadFromFirestore() {
       if (!currentUser || !firestoreDb) return Promise.reject();
-      return firestoreDb.collection('users').doc(currentUser.uid).get().then(function(doc) {
-        if (!doc.exists || !doc.data()) return;
-        var data = doc.data();
-        if (data.tasks && data.tasks.length) {
-          tasks = data.tasks;
-          nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(function(t) { return t.id; })) + 1;
+      return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).get().then(function(doc) {
+        if (doc.exists && doc.data()) {
+          var data = doc.data();
+          if (data.tasks && data.tasks.length) {
+            tasks = data.tasks;
+            nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(function(t) { return t.id; })) + 1;
+          }
+          if (data.responsibles && data.responsibles.length) responsibles = data.responsibles;
+          if (data.section3 && data.section3.length) restoreSection3(data.section3);
+          lastSavedSignature = getSignature(getDataSnapshotForSave());
+          return;
         }
-        if (data.responsibles && data.responsibles.length) responsibles = data.responsibles;
-        if (data.section3 && data.section3.length) restoreSection3(data.section3);
+        // Мягкая миграция старого формата users/{uid} -> sharedData/calendarMain.
+        return firestoreDb.collection('users').doc(currentUser.uid).get().then(function(oldDoc) {
+          if (!oldDoc.exists || !oldDoc.data()) return;
+          var oldData = oldDoc.data();
+          if (oldData.tasks && oldData.tasks.length) {
+            tasks = oldData.tasks;
+            nextId = typeof oldData.nextId === 'number' ? oldData.nextId : Math.max(0, ...tasks.map(function(t) { return t.id; })) + 1;
+          }
+          if (oldData.responsibles && oldData.responsibles.length) responsibles = oldData.responsibles;
+          if (oldData.section3 && oldData.section3.length) restoreSection3(oldData.section3);
+          lastSavedSignature = '';
+          saveToFirestore('Миграция данных в общий журнал');
+        });
       });
     }
 
-    function saveToFirestore() {
+    function loadHistory() {
+      if (!firestoreDb || !currentUser) return Promise.resolve();
+      const box = document.getElementById('historyBox');
+      const list = document.getElementById('historyList');
+      if (!box || !list) return Promise.resolve();
+      box.style.display = 'block';
+      return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).collection('history')
+        .orderBy('at', 'desc')
+        .limit(30)
+        .get()
+        .then(function(snapshot) {
+          if (snapshot.empty) {
+            list.innerHTML = '<li>Пока нет записей.</li>';
+            return;
+          }
+          list.innerHTML = snapshot.docs.map(function(d) {
+            const it = d.data() || {};
+            const actor = it.actor || 'Пользователь';
+            const reason = it.reason || 'Изменение данных';
+            let when = 'только что';
+            if (it.at && it.at.toDate) when = it.at.toDate().toLocaleString('ru-RU');
+            return '<li><strong>' + escapeHtml(actor) + '</strong> — ' + escapeHtml(reason) + ' <span style="color:#718096">(' + escapeHtml(when) + ')</span></li>';
+          }).join('');
+        })
+        .catch(function() {
+          list.innerHTML = '<li>Не удалось загрузить историю (проверьте правила Firestore).</li>';
+        });
+    }
+
+    function saveToFirestore(reason) {
       if (!currentUser || !firestoreDb) return;
       try {
-        firestoreDb.collection('users').doc(currentUser.uid).set({
-          tasks: tasks,
-          nextId: nextId,
-          section3: getSection3Data(),
-          responsibles: responsibles,
+        const payload = getDataSnapshotForSave();
+        const signature = getSignature(payload);
+        if (signature === lastSavedSignature) return;
+        firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).set({
+          tasks: payload.tasks,
+          nextId: payload.nextId,
+          section3: payload.section3,
+          responsibles: payload.responsibles,
+          updatedBy: getActorLabel(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(function() {
+          lastSavedSignature = signature;
+          return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).collection('history').add({
+            actor: getActorLabel(),
+            reason: reason || 'Изменение данных',
+            totals: { tasks: tasks.length, responsibles: responsibles.length },
+            at: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }).then(function() {
+          loadHistory();
+        }).catch(function(e) {
+          console.warn('History save failed', e);
         });
       } catch (e) { console.warn('Firestore save failed', e); }
     }
@@ -782,15 +910,15 @@
         if (data.section3 && data.section3.length > 0) restoreSection3(data.section3);
       } catch (e) { console.warn('Load storage failed', e); }
     }
-    function saveToStorage() {
+    function saveToStorage(reason) {
       try {
         var data = { tasks: tasks, nextId: nextId, section3: getSection3Data(), responsibles: responsibles };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        saveToFirestore();
+        saveToFirestore(reason || 'Автосохранение');
       } catch (e) { console.warn('Save storage failed', e); }
     }
     function saveAllData() {
-      saveToStorage();
+      saveToStorage('Ручное сохранение');
       const el = document.getElementById('saveStatus');
       if (el) { el.textContent = 'Сохранено'; setTimeout(() => { el.textContent = ''; }, 2000); }
     }
@@ -963,7 +1091,7 @@
       tr.innerHTML = '<td>' + nextNum + '</td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td>';
       tbody.appendChild(tr);
       tr.querySelectorAll('td[contenteditable="true"]').forEach(td => { td.addEventListener('blur', saveToStorage); });
-      saveToStorage();
+      saveToStorage('Добавлена строка в Раздел 3');
     }
     function editTask(id) {
       const t = tasks.find(x => x.id === id);
@@ -986,7 +1114,7 @@
       if (confirm('Удалить эту задачу?')) {
         tasks = tasks.filter(t => t.id !== id);
         renderTasks();
-        saveToStorage();
+        saveToStorage('Удалена задача');
       }
     }
     function closeModal() {
@@ -1012,7 +1140,7 @@
       }
       closeModal();
       renderTasks();
-      saveToStorage();
+      saveToStorage(id ? 'Изменена задача' : 'Добавлена задача');
     }
     function calculateDuration() {
       const s = document.getElementById('taskStart').value, e = document.getElementById('taskEnd').value;
@@ -1033,7 +1161,7 @@
     }
 
     initAuth();
-    window.addEventListener('beforeunload', saveToStorage);
+    window.addEventListener('beforeunload', function() { saveToStorage('Закрытие страницы'); });
   </script>
 </body>
 </html>
