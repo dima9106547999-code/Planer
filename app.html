@@ -630,6 +630,10 @@
     const SHARED_DOC_ID = 'calendarMain';
     const LOCAL_SESSION_KEY = 'stroika_current_user';
     let lastSavedSignature = '';
+    let sharedDocUnsubscribe = null;
+    let historyUnsubscribe = null;
+    let pendingSaveTimer = null;
+    let suppressRemoteApply = false;
 
     function getLocalSession() {
       try {
@@ -666,6 +670,29 @@
       }
     }
 
+    function normalizeReason(reason) {
+      return typeof reason === 'string' && reason.trim() ? reason.trim() : 'Автосохранение';
+    }
+
+    function applySharedData(data) {
+      if (!data) return;
+      if (Array.isArray(data.tasks)) {
+        tasks = data.tasks;
+        nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(function(t) { return t.id; })) + 1;
+      }
+      if (Array.isArray(data.responsibles) && data.responsibles.length) responsibles = data.responsibles;
+      if (Array.isArray(data.section3) && data.section3.length) restoreSection3(data.section3);
+      fillResponsibleSelect();
+      renderTasks();
+      const currentSnapshot = getDataSnapshotForSave();
+      lastSavedSignature = getSignature(currentSnapshot);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSnapshot));
+      } catch (e) {
+        console.warn('Local mirror save failed', e);
+      }
+    }
+
     function initAuth() {
       var cfg = window.FIREBASE_CONFIG;
       if (!cfg || !cfg.apiKey || cfg.apiKey === 'YOUR_API_KEY') {
@@ -678,6 +705,8 @@
           uid: localSession.email || localSession.phone || 'local-user'
         };
         document.getElementById('btn-logout').style.display = 'none';
+        const historyBox = document.getElementById('historyBox');
+        if (historyBox) historyBox.style.display = 'none';
         if (!loadFromEmbedData()) loadFromStorage();
         fillResponsibleSelect();
         document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(function(td) { td.addEventListener('blur', saveToStorage); });
@@ -701,7 +730,8 @@
             fillResponsibleSelect();
             document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(function(td) { td.addEventListener('blur', saveToStorage); });
             renderTasks();
-            loadHistory();
+            subscribeSharedDoc();
+            subscribeHistory();
           }).catch(function() {
             if (!loadFromEmbedData()) loadFromStorage();
             fillResponsibleSelect();
@@ -718,14 +748,7 @@
       if (!currentUser || !firestoreDb) return Promise.reject();
       return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).get().then(function(doc) {
         if (doc.exists && doc.data()) {
-          var data = doc.data();
-          if (data.tasks && data.tasks.length) {
-            tasks = data.tasks;
-            nextId = typeof data.nextId === 'number' ? data.nextId : Math.max(0, ...tasks.map(function(t) { return t.id; })) + 1;
-          }
-          if (data.responsibles && data.responsibles.length) responsibles = data.responsibles;
-          if (data.section3 && data.section3.length) restoreSection3(data.section3);
-          lastSavedSignature = getSignature(getDataSnapshotForSave());
+          applySharedData(doc.data());
           return;
         }
         // Мягкая миграция старого формата users/{uid} -> sharedData/calendarMain.
@@ -773,8 +796,61 @@
         });
     }
 
+    function subscribeSharedDoc() {
+      if (!firestoreDb || !currentUser || sharedDocUnsubscribe) return;
+      sharedDocUnsubscribe = firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID)
+        .onSnapshot(function(doc) {
+          if (!doc.exists || !doc.data()) return;
+          const incoming = getSignature({
+            tasks: doc.data().tasks || [],
+            nextId: doc.data().nextId,
+            section3: doc.data().section3 || [],
+            responsibles: doc.data().responsibles || []
+          });
+          if (incoming === lastSavedSignature) return;
+          suppressRemoteApply = true;
+          applySharedData(doc.data());
+          suppressRemoteApply = false;
+          const statusEl = document.getElementById('saveStatus');
+          if (statusEl) {
+            statusEl.textContent = 'Обновлено из общего журнала';
+            setTimeout(function() { statusEl.textContent = ''; }, 2000);
+          }
+        }, function(err) {
+          console.warn('Shared realtime sync failed', err);
+        });
+    }
+
+    function subscribeHistory() {
+      if (!firestoreDb || !currentUser || historyUnsubscribe) return;
+      const box = document.getElementById('historyBox');
+      const list = document.getElementById('historyList');
+      if (!box || !list) return;
+      box.style.display = 'block';
+      historyUnsubscribe = firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).collection('history')
+        .orderBy('at', 'desc')
+        .limit(30)
+        .onSnapshot(function(snapshot) {
+          if (snapshot.empty) {
+            list.innerHTML = '<li>Пока нет записей.</li>';
+            return;
+          }
+          list.innerHTML = snapshot.docs.map(function(d) {
+            const it = d.data() || {};
+            const actor = it.actor || 'Пользователь';
+            const reason = it.reason || 'Изменение данных';
+            let when = 'только что';
+            if (it.at && it.at.toDate) when = it.at.toDate().toLocaleString('ru-RU');
+            return '<li><strong>' + escapeHtml(actor) + '</strong> — ' + escapeHtml(reason) + ' <span style="color:#718096">(' + escapeHtml(when) + ')</span></li>';
+          }).join('');
+        }, function() {
+          list.innerHTML = '<li>Не удалось загрузить историю (проверьте правила Firestore).</li>';
+        });
+    }
+
     function saveToFirestore(reason) {
       if (!currentUser || !firestoreDb) return;
+      if (suppressRemoteApply) return;
       try {
         const payload = getDataSnapshotForSave();
         const signature = getSignature(payload);
@@ -790,12 +866,10 @@
           lastSavedSignature = signature;
           return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).collection('history').add({
             actor: getActorLabel(),
-            reason: reason || 'Изменение данных',
+            reason: normalizeReason(reason),
             totals: { tasks: tasks.length, responsibles: responsibles.length },
             at: firebase.firestore.FieldValue.serverTimestamp()
           });
-        }).then(function() {
-          loadHistory();
         }).catch(function(e) {
           console.warn('History save failed', e);
         });
@@ -846,7 +920,7 @@
       fillResponsibleSelect();
       document.getElementById('taskResponsible').value = name;
       input.value = '';
-      saveToStorage();
+      saveToStorage('Добавлен ответственный');
     }
     function removeSelectedResponsible() {
       const sel = document.getElementById('taskResponsible');
@@ -857,7 +931,7 @@
       if (used && !confirm('Этого ответственного используют в задачах. Всё равно удалить из списка?')) return;
       responsibles = responsibles.filter(r => r !== value);
       fillResponsibleSelect();
-      saveToStorage();
+      saveToStorage('Удален ответственный');
     }
 
     function getSection3Data() {
@@ -914,7 +988,12 @@
       try {
         var data = { tasks: tasks, nextId: nextId, section3: getSection3Data(), responsibles: responsibles };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        saveToFirestore(reason || 'Автосохранение');
+        if (pendingSaveTimer) clearTimeout(pendingSaveTimer);
+        const finalReason = normalizeReason(reason);
+        pendingSaveTimer = setTimeout(function() {
+          saveToFirestore(finalReason);
+          pendingSaveTimer = null;
+        }, 300);
       } catch (e) { console.warn('Save storage failed', e); }
     }
     function saveAllData() {
@@ -1161,7 +1240,19 @@
     }
 
     initAuth();
-    window.addEventListener('beforeunload', function() { saveToStorage('Закрытие страницы'); });
+    window.addEventListener('beforeunload', function() {
+      if (pendingSaveTimer) {
+        clearTimeout(pendingSaveTimer);
+        pendingSaveTimer = null;
+      }
+      try {
+        var data = { tasks: tasks, nextId: nextId, section3: getSection3Data(), responsibles: responsibles };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {}
+      saveToFirestore('Закрытие страницы');
+      if (sharedDocUnsubscribe) sharedDocUnsubscribe();
+      if (historyUnsubscribe) historyUnsubscribe();
+    });
   </script>
 </body>
 </html>
