@@ -589,10 +589,28 @@
   <script>
     let currentUser = null;
     let firestoreDb = null;
+    const LOCAL_SESSION_KEY = 'stroika_current_user';
+
+    function getLocalSession() {
+      try {
+        const session = JSON.parse(localStorage.getItem(LOCAL_SESSION_KEY) || 'null');
+        return session && typeof session === 'object' ? session : null;
+      } catch (e) {
+        return null;
+      }
+    }
 
     function initAuth() {
       var cfg = window.FIREBASE_CONFIG;
       if (!cfg || !cfg.apiKey || cfg.apiKey === 'YOUR_API_KEY') {
+        var localSession = getLocalSession();
+        if (!localSession) {
+          window.location.href = 'index.html';
+          return;
+        }
+        currentUser = {
+          uid: localSession.email || localSession.phone || 'local-user'
+        };
         document.getElementById('btn-logout').style.display = 'none';
         if (!loadFromEmbedData()) loadFromStorage();
         fillResponsibleSelect();
@@ -658,6 +676,7 @@
 
     document.getElementById('btn-logout').addEventListener('click', function(e) {
       e.preventDefault();
+      localStorage.removeItem(LOCAL_SESSION_KEY);
       if (typeof firebase !== 'undefined' && firebase.auth) firebase.auth().signOut();
       window.location.href = 'index.html';
     });

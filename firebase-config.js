@@ -1,10 +1,12 @@
-// Настройки Firebase. Создайте проект на https://console.firebase.google.com/
-// и подставьте свои значения из раздела "Настройки проекта" → "Ваши приложения".
+// Настройки Firebase для текущего проекта.
+// Оставляем формат window.FIREBASE_CONFIG, так как index.html/app.html
+// используют Firebase compat-скрипты без модульных import.
 window.FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDRm_G0Yr3r49sLS1KTGQnqnXKRzdcBLt4",
+  authDomain: "planer-90679.firebaseapp.com",
+  projectId: "planer-90679",
+  storageBucket: "planer-90679.firebasestorage.app",
+  messagingSenderId: "615864010738",
+  appId: "1:615864010738:web:a5f476334eafac77640d6b",
+  measurementId: "G-5WFFDDBJ1B"
 };

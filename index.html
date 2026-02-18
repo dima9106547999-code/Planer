@@ -161,23 +161,9 @@
     let firebaseAuth = null;
     let recaptchaVerifier = null;
     let confirmationResult = null;
-
-    function initFirebase() {
-      const cfg = window.FIREBASE_CONFIG;
-      if (!cfg || !cfg.apiKey || cfg.apiKey === 'YOUR_API_KEY') {
-        document.getElementById('auth-msg').style.display = 'block';
-        document.getElementById('auth-msg').className = 'msg error';
-        document.getElementById('auth-msg').textContent = 'Настройте firebase-config.js (см. README).';
-        return false;
-      }
-      if (typeof firebase === 'undefined') {
-        document.getElementById('auth-msg').textContent = 'Не удалось загрузить Firebase.';
-        return false;
-      }
-      firebase.initializeApp(cfg);
-      firebaseAuth = firebase.auth();
-      return true;
-    }
+    let demoPhoneCode = null;
+    const LOCAL_USERS_KEY = 'stroika_local_users';
+    const LOCAL_SESSION_KEY = 'stroika_current_user';
 
     function showMsg(text, isError) {
       const el = document.getElementById('auth-msg');
@@ -185,160 +171,293 @@
       el.className = 'msg ' + (isError ? 'error' : 'success');
       el.textContent = text;
     }
+
     function hideMsg() {
       document.getElementById('auth-msg').style.display = 'none';
     }
 
-    document.querySelectorAll('.tab').forEach(tab => {
+    function isFirebaseReady() {
+      return !!firebaseAuth;
+    }
+
+    function getLocalUsers() {
+      try {
+        const users = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+        return Array.isArray(users) ? users : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLocalUsers(users) {
+      localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+    }
+
+    function setLocalSession(user) {
+      localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify({
+        email: user.email || '',
+        phone: user.phone || '',
+        provider: user.provider || 'local',
+        loggedInAt: new Date().toISOString()
+      }));
+    }
+
+    function initFirebase() {
+      const cfg = window.FIREBASE_CONFIG;
+      if (!cfg || !cfg.apiKey || cfg.apiKey === 'YOUR_API_KEY') {
+        showMsg('Firebase не настроен: включен локальный демо-режим авторизации.', false);
+        return false;
+      }
+
+      if (typeof firebase === 'undefined') {
+        showMsg('Не удалось загрузить Firebase. Включен локальный демо-режим.', false);
+        return false;
+      }
+
+      if (!firebase.apps.length) {
+        firebase.initializeApp(cfg);
+      }
+      firebaseAuth = firebase.auth();
+      firebaseAuth.onAuthStateChanged(function(user) {
+        if (user) {
+          window.location.href = 'app.html';
+        }
+      });
+      return true;
+    }
+
+    function initRecaptcha() {
+      if (!firebaseAuth || recaptchaVerifier) return;
+      const recaptchaHost = document.getElementById('recaptcha-container');
+      if (!recaptchaHost) return;
+      recaptchaHost.innerHTML = '';
+      recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        size: 'normal'
+      });
+      recaptchaVerifier.render();
+    }
+
+    function switchPhoneToCodeStep() {
+      document.getElementById('phone-step1').classList.remove('active');
+      document.getElementById('phone-step2').classList.add('active');
+    }
+
+    function resetPhoneSteps() {
+      document.getElementById('phone-step1').classList.add('active');
+      document.getElementById('phone-step2').classList.remove('active');
+      document.getElementById('phone-code').value = '';
+    }
+
+    function loginEmail(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true;
+      hideMsg();
+      const email = document.getElementById('login-email').value.trim().toLowerCase();
+      const password = document.getElementById('login-password').value;
+
+      if (!email || !password) {
+        showMsg('Введите email и пароль', true);
+        btn.disabled = false;
+        return;
+      }
+
+      if (isFirebaseReady()) {
+        firebaseAuth.signInWithEmailAndPassword(email, password)
+          .then(function() {
+            window.location.href = 'app.html';
+          })
+          .catch(function(err) {
+            showMsg(err.message || 'Ошибка входа', true);
+          })
+          .finally(function() {
+            btn.disabled = false;
+          });
+        return;
+      }
+
+      const users = getLocalUsers();
+      const user = users.find(function(u) { return u.email === email; });
+      if (!user || user.password !== password) {
+        showMsg('Неверный email или пароль (локальный режим)', true);
+        btn.disabled = false;
+        return;
+      }
+      setLocalSession({ email: user.email, provider: 'local-email' });
+      window.location.href = 'app.html';
+    }
+
+    function registerEmail(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-register');
+      btn.disabled = true;
+      hideMsg();
+      const email = document.getElementById('reg-email').value.trim().toLowerCase();
+      const password = document.getElementById('reg-password').value;
+
+      if (!email || !password || password.length < 6) {
+        showMsg('Введите корректный email и пароль не короче 6 символов', true);
+        btn.disabled = false;
+        return;
+      }
+
+      if (isFirebaseReady()) {
+        firebaseAuth.createUserWithEmailAndPassword(email, password)
+          .then(function() {
+            showMsg('Регистрация успешна. Переход в приложение...', false);
+            setTimeout(function() {
+              window.location.href = 'app.html';
+            }, 800);
+          })
+          .catch(function(err) {
+            showMsg(err.message || 'Ошибка регистрации', true);
+          })
+          .finally(function() {
+            btn.disabled = false;
+          });
+        return;
+      }
+
+      const users = getLocalUsers();
+      const exists = users.some(function(u) { return u.email === email; });
+      if (exists) {
+        showMsg('Пользователь с таким email уже существует (локальный режим)', true);
+        btn.disabled = false;
+        return;
+      }
+      users.push({
+        email: email,
+        password: password,
+        createdAt: new Date().toISOString()
+      });
+      saveLocalUsers(users);
+      setLocalSession({ email: email, provider: 'local-email' });
+      showMsg('Регистрация успешна (локальный режим). Переход...', false);
+      setTimeout(function() {
+        window.location.href = 'app.html';
+      }, 600);
+    }
+
+    function sendPhoneCode() {
+      const phone = document.getElementById('phone-number').value.trim();
+      if (!phone) {
+        showMsg('Введите номер телефона', true);
+        return;
+      }
+
+      const sendBtn = document.getElementById('btn-send-sms');
+      sendBtn.disabled = true;
+      hideMsg();
+
+      if (isFirebaseReady()) {
+        initRecaptcha();
+        if (!recaptchaVerifier) {
+          showMsg('Не удалось инициализировать reCAPTCHA', true);
+          sendBtn.disabled = false;
+          return;
+        }
+        firebaseAuth.signInWithPhoneNumber(phone, recaptchaVerifier)
+          .then(function(result) {
+            confirmationResult = result;
+            switchPhoneToCodeStep();
+            showMsg('Код отправлен по СМС. Введите его ниже.', false);
+            document.getElementById('phone-code').focus();
+          })
+          .catch(function(err) {
+            showMsg(err.message || 'Не удалось отправить код', true);
+            if (recaptchaVerifier) {
+              recaptchaVerifier.clear();
+              recaptchaVerifier = null;
+            }
+            document.getElementById('recaptcha-container').innerHTML = '';
+          })
+          .finally(function() {
+            sendBtn.disabled = false;
+          });
+        return;
+      }
+
+      demoPhoneCode = String(Math.floor(100000 + Math.random() * 900000));
+      switchPhoneToCodeStep();
+      showMsg('Локальный режим: демо-код ' + demoPhoneCode, false);
+      document.getElementById('phone-code').focus();
+      sendBtn.disabled = false;
+    }
+
+    function verifyPhoneCode() {
+      const code = document.getElementById('phone-code').value.trim();
+      if (!code) {
+        showMsg('Введите код из СМС', true);
+        return;
+      }
+
+      const verifyBtn = document.getElementById('btn-verify-code');
+      verifyBtn.disabled = true;
+      hideMsg();
+
+      if (isFirebaseReady()) {
+        if (!confirmationResult) {
+          showMsg('Сначала запросите код по СМС', true);
+          verifyBtn.disabled = false;
+          return;
+        }
+        confirmationResult.confirm(code)
+          .then(function() {
+            window.location.href = 'app.html';
+          })
+          .catch(function(err) {
+            showMsg(err.message || 'Неверный код', true);
+          })
+          .finally(function() {
+            verifyBtn.disabled = false;
+          });
+        return;
+      }
+
+      if (!demoPhoneCode) {
+        showMsg('Сначала запросите код по СМС', true);
+        verifyBtn.disabled = false;
+        return;
+      }
+
+      if (code !== demoPhoneCode) {
+        showMsg('Неверный код (локальный режим)', true);
+        verifyBtn.disabled = false;
+        return;
+      }
+
+      setLocalSession({
+        phone: document.getElementById('phone-number').value.trim(),
+        provider: 'local-phone'
+      });
+      demoPhoneCode = null;
+      window.location.href = 'app.html';
+    }
+
+    document.querySelectorAll('.tab').forEach(function(tab) {
       tab.addEventListener('click', function() {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(function(t) {
+          t.classList.remove('active');
+        });
+        document.querySelectorAll('.panel').forEach(function(p) {
+          p.classList.remove('active');
+        });
+
         this.classList.add('active');
-        const id = 'panel-' + this.dataset.tab;
-        document.getElementById(id).classList.add('active');
+        document.getElementById('panel-' + this.dataset.tab).classList.add('active');
         hideMsg();
+
         if (this.dataset.tab === 'phone') {
-          document.getElementById('phone-step1').classList.add('active');
-          document.getElementById('phone-step2').classList.remove('active');
+          resetPhoneSteps();
           initRecaptcha();
         }
       });
     });
 
-    function initRecaptcha() {
-      if (!firebaseAuth || recaptchaVerifier) return;
-      if (document.getElementById('recaptcha-container').innerHTML) return;
-      recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-        size: 'normal',
-        callback: function() {}
-      });
-      recaptchaVerifier.render();
-    }
+    document.getElementById('btn-send-sms').addEventListener('click', sendPhoneCode);
+    document.getElementById('btn-verify-code').addEventListener('click', verifyPhoneCode);
 
-    function loginEmail(e) {
-      e.preventDefault();
-      if (!firebaseAuth) return;
-      const btn = document.getElementById('btn-login');
-      btn.disabled = true;
-      hideMsg();
-      firebaseAuth.signInWithEmailAndPassword(
-        document.getElementById('login-email').value.trim(),
-        document.getElementById('login-password').value
-      ).then(function() {
-        window.location.href = 'app.html';
-      }).catch(function(err) {
-        showMsg(err.message || 'Ошибка входа', true);
-        btn.disabled = false;
-      });
-    }
-
-    function registerEmail(e) {
-      e.preventDefault();
-      if (!firebaseAuth) return;
-      const btn = document.getElementById('btn-register');
-      btn.disabled = true;
-      hideMsg();
-      firebaseAuth.createUserWithEmailAndPassword(
-        document.getElementById('reg-email').value.trim(),
-        document.getElementById('reg-password').value
-      ).then(function() {
-        showMsg('Регистрация успешна. Переход в приложение…', false);
-        setTimeout(function() { window.location.href = 'app.html'; }, 800);
-      }).catch(function(err) {
-        showMsg(err.message || 'Ошибка регистрации', true);
-        btn.disabled = false;
-      });
-    }
-
-    <script type="module">
-  import {
-    RecaptchaVerifier,
-    signInWithPhoneNumber,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword
-  } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-
-  // auth берём из firebase-config.js (там мы сделали window.auth = getAuth(app))
-  const auth = window.auth;
-
-  // Сообщения
-  const msgBox = document.getElementById('msg-box');
-  function showMsg(text, isError = false) {
-    if (!msgBox) return;
-    msgBox.textContent = text;
-    msgBox.style.display = 'block';
-    msgBox.style.background = isError ? '#f8d7da' : '#d4edda';
-    msgBox.style.color = isError ? '#721c24' : '#155724';
-  }
-  function hideMsg() {
-    if (!msgBox) return;
-    msgBox.style.display = 'none';
-  }
-
-  // ----- Авторизация по телефону -----
-  let confirmationResult = null;
-
-  const phoneInput  = document.getElementById('phone-number');
-  const sendBtn     = document.getElementById('btn-send-code');
-  const codeInput   = document.getElementById('phone-code');
-  const verifyBtn   = document.getElementById('btn-verify-code');
-  const recaptchaEl = document.getElementById('recaptcha-container');
-
-  if (auth && phoneInput && sendBtn && codeInput && verifyBtn && recaptchaEl) {
-    // Инициализация reCAPTCHA
-    const verifier = new RecaptchaVerifier(
-      recaptchaEl,
-      { size: 'invisible' },
-      auth
-    );
-
-    sendBtn.addEventListener('click', async () => {
-      const phone = phoneInput.value.trim();
-      if (!phone) { showMsg('Введите номер телефона', true); return; }
-
-      sendBtn.disabled = true;
-      hideMsg();
-      try {
-        confirmationResult = await signInWithPhoneNumber(auth, phone, verifier);
-        showMsg('Код отправлен по СМС. Введите его ниже.');
-        codeInput.focus();
-      } catch (err) {
-        console.error(err);
-        showMsg(err.message || 'Не удалось отправить код', true);
-        sendBtn.disabled = false;
-      }
-    });
-
-    verifyBtn.addEventListener('click', async () => {
-      if (!confirmationResult) return;
-      const code = codeInput.value.trim();
-      if (!code) { showMsg('Введите код из СМС', true); return; }
-
-      verifyBtn.disabled = true;
-      hideMsg();
-
-      try {
-        await confirmationResult.confirm(code);
-        // Успешный вход
-        window.location.href = 'app.html';
-      } catch (err) {
-        console.error(err);
-        showMsg(err.message || 'Неверный код', true);
-        verifyBtn.disabled = false;
-      }
-    });
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // Уже авторизован — сразу в приложение
-        window.location.href = 'app.html';
-      }
-    });
-  }
-</script>
-
-<script type="module" src="firebase-config.js"></script>
-<script type="module" src="script.js"></script>
+    initFirebase();
+  </script>
 </body>
 </html>
