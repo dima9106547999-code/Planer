@@ -688,6 +688,7 @@
       alert(
         'Нет доступа к общей таблице Firestore.\n\n' +
         'Добавьте правила для пути sharedData/calendarMain и sharedData/calendarMain/history.\n' +
+        'Если у вас role-based rules, убедитесь что есть документ users/{uid} с role (admin/editor/viewer).\n' +
         'Иначе изменения будут только локально на этом устройстве.'
       );
     }
@@ -762,7 +763,7 @@
             if (err && err.code === 'permission-denied') {
               showCloudPermissionWarningOnce();
             } else {
-              showSyncStatus('Облако недоступно, включен локальный режим', true);
+              showSyncStatus('Облако недоступно: ' + ((err && err.message) || 'unknown error'), true);
             }
           });
         });
@@ -901,7 +902,7 @@
           if (e && e.code === 'permission-denied') {
             showCloudPermissionWarningOnce();
           } else {
-            showSyncStatus('Ошибка сохранения в облако', true);
+            showSyncStatus('Ошибка сохранения в облако: ' + ((e && e.message) || 'unknown error'), true);
           }
           console.warn('History save failed', e);
         });
