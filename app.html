@@ -763,6 +763,7 @@
             renderTasks();
             subscribeSharedDoc();
             subscribeHistory();
+            showSyncStatus('Синхронизация активна', false);
           }).catch(function(err) {
             if (!loadFromEmbedData()) loadFromStorage();
             fillResponsibleSelect();
@@ -843,31 +844,62 @@
     }
 
     function subscribeSharedDoc() {
-      if (!firestoreDb || !currentUser || sharedDocUnsubscribe) return;
+      if (!firestoreDb || !currentUser) {
+        console.warn('Cannot subscribe: missing firestoreDb or currentUser');
+        return;
+      }
+      // Отписываемся от старой подписки, если есть
+      if (sharedDocUnsubscribe) {
+        sharedDocUnsubscribe();
+        sharedDocUnsubscribe = null;
+      }
+      console.log('Subscribing to shared document...');
       sharedDocUnsubscribe = firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID)
-        .onSnapshot(function(doc) {
-          if (!doc.exists || !doc.data()) return;
+        .onSnapshot({
+          includeMetadataChanges: false
+        }, function(doc) {
+          if (!doc.exists) {
+            console.log('Shared document does not exist yet');
+            return;
+          }
+          const data = doc.data();
+          if (!data) return;
           const incoming = getSignature({
-            tasks: doc.data().tasks || [],
-            nextId: doc.data().nextId,
-            section3: doc.data().section3 || [],
-            responsibles: doc.data().responsibles || []
+            tasks: data.tasks || [],
+            nextId: data.nextId,
+            section3: data.section3 || [],
+            responsibles: data.responsibles || []
           });
-          if (incoming === lastSavedSignature) return;
+          if (incoming === lastSavedSignature) {
+            console.log('Incoming data matches current, skipping apply');
+            return;
+          }
+          console.log('Applying remote changes from', data.updatedBy || 'unknown');
           suppressRemoteApply = true;
-          applySharedData(doc.data());
+          applySharedData(data);
           suppressRemoteApply = false;
           const statusEl = document.getElementById('saveStatus');
           if (statusEl) {
             statusEl.textContent = 'Обновлено из общего журнала';
-            setTimeout(function() { statusEl.textContent = ''; }, 2000);
+            statusEl.style.color = '#059669';
+            setTimeout(function() { statusEl.textContent = ''; }, 3000);
           }
         }, function(err) {
-          if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
+          console.error('Shared realtime sync error:', err);
+          if (err && err.code === 'permission-denied') {
+            showCloudPermissionWarningOnce();
+          } else if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
             showSyncStatus('Нет интернета. Работаем в офлайн-режиме.', false);
           } else {
-            console.warn('Shared realtime sync failed', err);
+            showSyncStatus('Ошибка синхронизации: ' + (err.message || err.code || 'unknown'), true);
           }
+          // Retry подписки через 5 секунд
+          setTimeout(function() {
+            if (firestoreDb && currentUser) {
+              console.log('Retrying subscription...');
+              subscribeSharedDoc();
+            }
+          }, 5000);
         });
     }
 
@@ -903,12 +935,22 @@
     }
 
     function saveToFirestore(reason) {
-      if (!currentUser || !firestoreDb) return;
-      if (suppressRemoteApply) return;
+      if (!currentUser || !firestoreDb) {
+        console.warn('Cannot save: missing currentUser or firestoreDb');
+        return;
+      }
+      if (suppressRemoteApply) {
+        console.log('Skipping save: suppressRemoteApply is true');
+        return;
+      }
       try {
         const payload = getDataSnapshotForSave();
         const signature = getSignature(payload);
-        if (signature === lastSavedSignature) return;
+        if (signature === lastSavedSignature) {
+          console.log('Skipping save: data unchanged');
+          return;
+        }
+        console.log('Saving to Firestore:', normalizeReason(reason));
         firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).set({
           tasks: payload.tasks,
           nextId: payload.nextId,
@@ -916,7 +958,8 @@
           responsibles: payload.responsibles,
           updatedBy: getActorLabel(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(function() {
+        }, { merge: false }).then(function() {
+          console.log('Main document saved successfully');
           lastSavedSignature = signature;
           return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).collection('history').add({
             actor: getActorLabel(),
@@ -924,6 +967,9 @@
             totals: { tasks: tasks.length, responsibles: responsibles.length },
             at: firebase.firestore.FieldValue.serverTimestamp()
           });
+        }).then(function() {
+          console.log('History entry saved successfully');
+          showSyncStatus('Сохранено в облако', false);
         }).catch(function(e) {
           if (e && e.code === 'permission-denied') {
             showCloudPermissionWarningOnce();
@@ -932,7 +978,7 @@
           } else {
             showSyncStatus('Ошибка сохранения в облако: ' + ((e && e.message) || 'unknown error'), true);
           }
-          console.warn('History save failed', e);
+          console.warn('Save failed', e);
         });
       } catch (e) { console.warn('Firestore save failed', e); }
     }
