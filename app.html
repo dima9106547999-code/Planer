@@ -743,6 +743,14 @@
       try {
         firebase.initializeApp(cfg);
         firestoreDb = firebase.firestore();
+        // Включаем кеширование для работы офлайн
+        firestoreDb.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
+          if (err.code === 'failed-precondition') {
+            console.warn('Persistence failed: multiple tabs open');
+          } else if (err.code === 'unimplemented') {
+            console.warn('Persistence not supported in this browser');
+          }
+        });
         firebase.auth().onAuthStateChanged(function(user) {
           currentUser = user;
           if (!user) {
@@ -762,6 +770,16 @@
             renderTasks();
             if (err && err.code === 'permission-denied') {
               showCloudPermissionWarningOnce();
+            } else if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
+              showSyncStatus('Нет интернета. Данные сохранены локально, синхронизация при восстановлении связи.', false);
+              // Retry при восстановлении соединения
+              firestoreDb.enableNetwork().then(function() {
+                loadFromFirestore().then(function() {
+                  subscribeSharedDoc();
+                  subscribeHistory();
+                  showSyncStatus('Соединение восстановлено', false);
+                });
+              }).catch(function() {});
             } else {
               showSyncStatus('Облако недоступно: ' + ((err && err.message) || 'unknown error'), true);
             }
@@ -774,7 +792,7 @@
 
     function loadFromFirestore() {
       if (!currentUser || !firestoreDb) return Promise.reject();
-      return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).get().then(function(doc) {
+      return firestoreDb.collection(SHARED_COLLECTION).doc(SHARED_DOC_ID).get({ source: 'default' }).then(function(doc) {
         if (doc.exists && doc.data()) {
           applySharedData(doc.data());
           return;
@@ -845,7 +863,11 @@
             setTimeout(function() { statusEl.textContent = ''; }, 2000);
           }
         }, function(err) {
-          console.warn('Shared realtime sync failed', err);
+          if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
+            showSyncStatus('Нет интернета. Работаем в офлайн-режиме.', false);
+          } else {
+            console.warn('Shared realtime sync failed', err);
+          }
         });
     }
 
@@ -871,8 +893,12 @@
             if (it.at && it.at.toDate) when = it.at.toDate().toLocaleString('ru-RU');
             return '<li><strong>' + escapeHtml(actor) + '</strong> — ' + escapeHtml(reason) + ' <span style="color:#718096">(' + escapeHtml(when) + ')</span></li>';
           }).join('');
-        }, function() {
-          list.innerHTML = '<li>Не удалось загрузить историю (проверьте правила Firestore).</li>';
+        }, function(err) {
+          if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
+            list.innerHTML = '<li>История недоступна (нет интернета).</li>';
+          } else {
+            list.innerHTML = '<li>Не удалось загрузить историю (проверьте правила Firestore).</li>';
+          }
         });
     }
 
@@ -901,6 +927,8 @@
         }).catch(function(e) {
           if (e && e.code === 'permission-denied') {
             showCloudPermissionWarningOnce();
+          } else if (e && (e.message && e.message.indexOf('offline') !== -1 || e.code === 'unavailable')) {
+            showSyncStatus('Нет интернета. Изменения сохранены локально, отправятся при восстановлении связи.', false);
           } else {
             showSyncStatus('Ошибка сохранения в облако: ' + ((e && e.message) || 'unknown error'), true);
           }
