@@ -743,7 +743,7 @@
       try {
         firebase.initializeApp(cfg);
         firestoreDb = firebase.firestore();
-        // Включаем кеширование для работы офлайн
+        // Включаем кеширование для работы офлайн (старый способ для compat)
         firestoreDb.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
           if (err.code === 'failed-precondition') {
             console.warn('Persistence failed: multiple tabs open');
@@ -770,7 +770,20 @@
             document.querySelectorAll('#section3Body td[contenteditable="true"]').forEach(function(td) { td.addEventListener('blur', saveToStorage); });
             renderTasks();
             if (err && err.code === 'permission-denied') {
-              showCloudPermissionWarningOnce();
+              const errMsg = err.message || '';
+              if (errMsg.indexOf('Firestore API has not been used') !== -1 || errMsg.indexOf('it is disabled') !== -1) {
+                showSyncStatus('Firestore API не включен в проекте. Включите его в Google Cloud Console.', true);
+                alert(
+                  'Firestore API не включен в проекте.\n\n' +
+                  '1. Откройте: https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=planer-90679\n' +
+                  '2. Нажмите "Включить"\n' +
+                  '3. Подождите 1-2 минуты\n' +
+                  '4. Обновите страницу\n\n' +
+                  'Без этого синхронизация между устройствами работать не будет.'
+                );
+              } else {
+                showCloudPermissionWarningOnce();
+              }
             } else if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
               showSyncStatus('Нет интернета. Данные сохранены локально, синхронизация при восстановлении связи.', false);
               // Retry при восстановлении соединения
