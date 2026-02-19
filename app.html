@@ -900,11 +900,25 @@
         }, function(err) {
           console.error('Shared realtime sync error:', err);
           if (err && err.code === 'permission-denied') {
-            showCloudPermissionWarningOnce();
+            const errMsg = err.message || '';
+            if (errMsg.indexOf('Firestore API has not been used') !== -1 || errMsg.indexOf('it is disabled') !== -1) {
+              showSyncStatus('Firestore API не включен. Включите в Google Cloud Console.', true);
+            } else {
+              showCloudPermissionWarningOnce();
+            }
           } else if (err && (err.message && err.message.indexOf('offline') !== -1 || err.code === 'unavailable')) {
             showSyncStatus('Нет интернета. Работаем в офлайн-режиме.', false);
           } else {
-            showSyncStatus('Ошибка синхронизации: ' + (err.message || err.code || 'unknown'), true);
+            // Проверяем на блокировщик рекламы через console warnings
+            const hasBlockedError = err && (err.message && (err.message.indexOf('blocked') !== -1 || err.message.indexOf('ERR_BLOCKED') !== -1));
+            if (hasBlockedError || window.navigator.userAgent.indexOf('Chrome') !== -1) {
+              showSyncStatus('Блокировщик рекламы блокирует Firestore. Отключите его для этого сайта.', true);
+              setTimeout(function() {
+                alert('Блокировщик рекламы (AdBlock/uBlock) блокирует запросы к Firestore.\n\nОтключите блокировщик для этого сайта или добавьте исключение для:\n- firestore.googleapis.com\n- dima9106547999-code.github.io\n\nБез этого синхронизация работать не будет.');
+              }, 1000);
+            } else {
+              showSyncStatus('Ошибка синхронизации: ' + (err.message || err.code || 'unknown'), true);
+            }
           }
           // Retry подписки через 5 секунд
           setTimeout(function() {
